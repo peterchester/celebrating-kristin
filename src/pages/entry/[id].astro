@@ -34,11 +34,15 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
       <span class="date"> · {dateLabel}</span>
     </p>
 
+    {media[0] && (
+      <Media type={media[0].type} src={media[0].src} poster={media[0].poster} caption={media[0].caption} alt={media[0].alt} />
+    )}
+
     <article>
       {paragraphs.map((p) => <p>{p}</p>)}
     </article>
 
-    {media.map((m) => <Media type={m.type} src={m.src} caption={m.caption} alt={m.alt} />)}
+    {media.slice(1).map((m) => <Media type={m.type} src={m.src} poster={m.poster} caption={m.caption} alt={m.alt} />)}
 
     {/* Revealed by script only when this device owns the entry or admin mode is on. */}
     <section id="owner-tools" class="owner-tools" hidden>
