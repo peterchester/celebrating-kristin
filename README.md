@@ -1,4 +1,4 @@
-# Remembering Kristin
+# Celebrating Kristin
 
 A place for friends and family to share stories, memories, and reflections —
 in words, photos, audio, and video.
