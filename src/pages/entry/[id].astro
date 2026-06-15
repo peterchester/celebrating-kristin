@@ -35,7 +35,103 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
     </article>
 
     {media.map((m) => <Media type={m.type} src={m.src} caption={m.caption} alt={m.alt} />)}
+
+    {/* Revealed by script only when this device owns the entry or admin mode is on. */}
+    <section id="owner-tools" class="owner-tools" hidden>
+      <div class="ot-bar">
+        <span id="ot-label" class="ot-label"></span>
+        <span class="ot-actions">
+          <button type="button" id="ot-edit">Edit</button>
+          <button type="button" id="ot-delete" class="danger">Delete</button>
+        </span>
+      </div>
+      <form id="ot-form" hidden>
+        <label>Title<input name="title" type="text" /></label>
+        <label>Your name<input name="name" type="text" /></label>
+        <label>How you knew Kristin<input name="relationship" type="text" /></label>
+        <label>Your memory<textarea name="body" rows="10"></textarea></label>
+        <div class="ot-buttons">
+          <button type="submit">Save changes</button>
+          <button type="button" id="ot-cancel" class="ghost">Cancel</button>
+        </div>
+        <p id="ot-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
   </main>
+
+  <script define:vars={{ id: entry.id, API_BASE, d: { title: title ?? '', body, name: author.name, rel: author.relationship ?? '' } }}>
+    (function () {
+      if (!API_BASE) return; // static build with no backend → file-based admin only
+
+      const cookie = (k) => {
+        const m = document.cookie.split('; ').find((c) => c.startsWith(k + '='));
+        return m ? decodeURIComponent(m.slice(k.length + 1)) : null;
+      };
+
+      let ownerToken = null;
+      try {
+        const list = JSON.parse(cookie('rk_owner') || '[]');
+        ownerToken = (list.find((e) => e.id === id) || {}).token || null;
+      } catch {}
+      const adminToken = cookie('rk_admin');
+      if (!ownerToken && !adminToken) return; // not the owner, not admin → leave hidden
+
+      const tools = document.getElementById('owner-tools');
+      const form = document.getElementById('ot-form');
+      const statusEl = document.getElementById('ot-status');
+      const fld = (n) => form.querySelector('[name="' + n + '"]');
+
+      document.getElementById('ot-label').textContent = ownerToken
+        ? 'This is your memory — you can edit or remove it.'
+        : 'Admin controls.';
+      fld('title').value = d.title;
+      fld('name').value = d.name;
+      fld('relationship').value = d.rel;
+      fld('body').value = d.body;
+      tools.hidden = false;
+
+      const creds = () => (ownerToken ? { token: ownerToken } : { adminToken });
+      const post = (path, extra) =>
+        fetch(API_BASE + path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id, ...creds(), ...extra }),
+        });
+
+      document.getElementById('ot-edit').addEventListener('click', () => { form.hidden = !form.hidden; });
+      document.getElementById('ot-cancel').addEventListener('click', () => { form.hidden = true; });
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        statusEl.textContent = 'Saving…';
+        try {
+          const r = await post('/update', {
+            title: fld('title').value,
+            name: fld('name').value,
+            relationship: fld('relationship').value,
+            body: fld('body').value,
+          });
+          if (!r.ok) throw new Error('Could not save — your edit access may have expired.');
+          location.reload();
+        } catch (err) { statusEl.textContent = err.message; }
+      });
+
+      document.getElementById('ot-delete').addEventListener('click', async () => {
+        if (!confirm('Permanently delete this memory? This cannot be undone.')) return;
+        try {
+          const r = await post('/delete', {});
+          if (!r.ok) throw new Error('Could not delete — your access may have expired.');
+          // Forget this entry's token in the owner cookie.
+          try {
+            const list = JSON.parse(cookie('rk_owner') || '[]').filter((e) => e.id !== id);
+            const secure = location.protocol === 'https:' ? '; secure' : '';
+            document.cookie = 'rk_owner=' + encodeURIComponent(JSON.stringify(list)) + '; path=/; max-age=' + 90 * 86400 + '; samesite=Lax' + secure;
+          } catch {}
+          location.href = '/';
+        } catch (err) { alert(err.message); }
+      });
+    })();
+  </script>
 </Base>
 
 <style>
@@ -45,4 +141,22 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
   .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; margin: 0 0 2rem; }
   .byline strong { color: var(--ink); font-weight: 600; }
   article p { margin: 0 0 1.3rem; }
+
+  .owner-tools { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px dashed var(--line); font-family: -apple-system, system-ui, sans-serif; }
+  .ot-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+  .ot-label { color: var(--soft); font-size: .9rem; }
+  .ot-actions { display: flex; gap: .5rem; }
+  .owner-tools button {
+    padding: .45rem 1rem; border: 1px solid var(--line); border-radius: 999px;
+    background: #fff; color: var(--ink); font: inherit; font-size: .9rem; cursor: pointer;
+  }
+  .owner-tools button.danger { color: #b4451f; border-color: #e3c4b8; }
+  .owner-tools button.ghost { color: var(--soft); }
+  #ot-form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  #ot-form label { display: grid; gap: .35rem; font-size: .9rem; }
+  #ot-form input, #ot-form textarea { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+  #ot-form textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
+  .ot-buttons { display: flex; gap: .5rem; }
+  .ot-buttons button[type="submit"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #ot-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
 </style>

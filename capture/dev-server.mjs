@@ -13,15 +13,21 @@
 // Uses only Node built-ins — no dependencies to install.
 
 import { createServer } from 'node:http';
-import { mkdir, writeFile, appendFile } from 'node:fs/promises';
+import { mkdir, writeFile, appendFile, readFile, unlink } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = join(ROOT, 'public');
 const ENTRIES = join(ROOT, 'src', 'content', 'entries');
-const PRIVATE = join(ROOT, 'capture', 'private'); // emails etc. — gitignored, never published
+const PRIVATE = join(ROOT, 'capture', 'private'); // emails, edit tokens — gitignored, never published
+const TOKENS = join(PRIVATE, 'tokens.json'); // { entryId: sha256(editToken) }
 const PORT = 8787;
+
+// Set RK_ADMIN_TOKEN to enable admin override (edit/delete ANY entry).
+//   RK_ADMIN_TOKEN="some-long-secret" npm run capture
+const ADMIN = process.env.RK_ADMIN_TOKEN || '';
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -48,6 +54,29 @@ const safeMediaPath = (key) => {
   if (typeof key !== 'string' || !key.startsWith('/media/') || key.includes('..')) return null;
   const abs = join(PUBLIC, key);
   return abs.startsWith(join(PUBLIC, 'media')) ? abs : null;
+};
+
+// Entry ids are filename-safe slugs only — block path traversal.
+const safeEntryPath = (id) =>
+  typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? join(ENTRIES, `${id}.json`) : null;
+
+const sha = (t) => createHash('sha256').update(String(t)).digest('hex');
+const eq = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const loadTokens = async () => {
+  try { return JSON.parse(await readFile(TOKENS, 'utf8')); } catch { return {}; }
+};
+const saveTokens = async (o) => {
+  await mkdir(PRIVATE, { recursive: true });
+  await writeFile(TOKENS, JSON.stringify(o, null, 2) + '\n');
+};
+const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
+
+// True if the caller owns this entry (valid edit token) or is the admin.
+const authorize = async (id, token, adminToken) => {
+  if (isAdmin(adminToken)) return true;
+  if (!token) return false;
+  const want = (await loadTokens())[id];
+  return !!want && eq(sha(token), want);
 };
 
 const server = createServer(async (req, res) => {
@@ -84,12 +113,59 @@ const server = createServer(async (req, res) => {
       await mkdir(ENTRIES, { recursive: true });
       await writeFile(join(ENTRIES, `${id}.json`), JSON.stringify(entry, null, 2) + '\n');
 
+      // Issue a per-entry edit token; store only its hash. The token goes back to
+      // the contributor's browser (cookie) so they can later edit/delete this entry.
+      const editToken = randomBytes(16).toString('hex');
+      const tokens = await loadTokens();
+      tokens[id] = sha(editToken);
+      await saveTokens(tokens);
+
       if (email) {
         await mkdir(PRIVATE, { recursive: true });
         await appendFile(join(PRIVATE, 'contacts.jsonl'), JSON.stringify({ id, name: s.author.name, email }) + '\n');
       }
 
       console.log(`✓ saved entry ${id}${s.media?.length ? ` (+${s.media.length} media)` : ''}`);
+      return send(res, 200, { ok: true, id, editToken });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/update') {
+      const { id, token, adminToken, name, relationship, title, body } = JSON.parse((await readBody(req)).toString() || '{}');
+      const file = safeEntryPath(id);
+      if (!file) return send(res, 400, { error: 'bad id' });
+      if (!(await authorize(id, token, adminToken))) return send(res, 403, { error: 'not allowed' });
+
+      let entry;
+      try { entry = JSON.parse(await readFile(file, 'utf8')); } catch { return send(res, 404, { error: 'no such entry' }); }
+      if (typeof body === 'string' && body.trim()) entry.body = body.trim();
+      if (typeof name === 'string' && name.trim()) entry.author.name = name.trim();
+      if (typeof title === 'string') entry.title = title.trim() || undefined; // '' removes it
+      if (typeof relationship === 'string') entry.author.relationship = relationship.trim() || undefined;
+      entry.editedAt = new Date().toISOString();
+      await writeFile(file, JSON.stringify(entry, null, 2) + '\n');
+
+      console.log(`✎ updated entry ${id}${isAdmin(adminToken) ? ' (admin)' : ''}`);
+      return send(res, 200, { ok: true, id });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/delete') {
+      const { id, token, adminToken } = JSON.parse((await readBody(req)).toString() || '{}');
+      const file = safeEntryPath(id);
+      if (!file) return send(res, 400, { error: 'bad id' });
+      if (!(await authorize(id, token, adminToken))) return send(res, 403, { error: 'not allowed' });
+
+      let entry = null;
+      try { entry = JSON.parse(await readFile(file, 'utf8')); } catch {}
+      await unlink(file).catch(() => {});
+      for (const m of entry?.media ?? []) { // remove this entry's uploaded media too
+        const mp = safeMediaPath(m.src);
+        if (mp) await unlink(mp).catch(() => {});
+      }
+      const tokens = await loadTokens();
+      delete tokens[id];
+      await saveTokens(tokens);
+
+      console.log(`✗ deleted entry ${id}${isAdmin(adminToken) ? ' (admin)' : ''}`);
       return send(res, 200, { ok: true, id });
     }
 

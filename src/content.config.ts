@@ -30,6 +30,7 @@ const entries = defineCollection({
       )
       .default([]),
     submittedAt: z.coerce.date(),
+    editedAt: z.coerce.date().optional(),
     status: z.enum(['published', 'hidden']).default('published'),
   }),
 });

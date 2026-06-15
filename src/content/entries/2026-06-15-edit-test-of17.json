@@ -1,0 +1,10 @@
+{
+  "author": {
+    "name": "Edit Test",
+    "relationship": "Friend"
+  },
+  "title": "Original title",
+  "body": "Original body.",
+  "submittedAt": "2026-06-15T16:59:25.793Z",
+  "status": "published"
+}

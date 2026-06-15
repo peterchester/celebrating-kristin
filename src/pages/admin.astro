@@ -1,0 +1,75 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Admin — Remembering Kristin">
+  <main class="wrap admin">
+    <p class="back"><a href="/">← Home</a></p>
+    <h1>Admin</h1>
+    <p>
+      Paste the admin token to enable <strong>Edit</strong> / <strong>Delete</strong>
+      controls on every memory — on this device only. It's stored in your browser
+      (an <code>rk_admin</code> cookie), never sent anywhere except with your own
+      edit/delete requests, and you can clear it anytime.
+    </p>
+
+    <form id="admin-form">
+      <label>
+        Admin token
+        <input name="token" type="password" autocomplete="off" placeholder="the RK_ADMIN_TOKEN the backend was started with" />
+      </label>
+      <div class="row">
+        <button type="submit">Enable admin mode</button>
+        <button type="button" id="clear" class="ghost">Clear</button>
+      </div>
+      <p id="state" role="status" aria-live="polite"></p>
+    </form>
+
+    <p class="note">
+      The most durable way to administer is editing the JSON files in
+      <code>src/content/entries/</code> and redeploying — see the README. This
+      page is just the convenient path while the capture backend is running.
+    </p>
+  </main>
+</Base>
+
+<script>
+  const form = document.getElementById('admin-form') as HTMLFormElement;
+  const state = document.getElementById('state')!;
+  const tokenInput = form.querySelector('[name="token"]') as HTMLInputElement;
+  const has = () => document.cookie.split('; ').some((c) => c.startsWith('rk_admin='));
+  const secure = location.protocol === 'https:' ? '; secure' : '';
+
+  const refresh = () => { state.textContent = has() ? 'Admin mode is ON on this device.' : 'Admin mode is off.'; };
+  refresh();
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const t = tokenInput.value.trim();
+    if (!t) return;
+    document.cookie = `rk_admin=${encodeURIComponent(t)}; path=/; max-age=${30 * 86400}; samesite=Lax${secure}`;
+    form.reset();
+    state.textContent = 'Saved. Open any memory to edit or delete it.';
+  });
+
+  document.getElementById('clear')!.addEventListener('click', () => {
+    document.cookie = 'rk_admin=; path=/; max-age=0';
+    refresh();
+  });
+</script>
+
+<style>
+  .admin { padding-top: 2.5rem; max-width: 34rem; }
+  .back { font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin-bottom: 1.5rem; }
+  h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 .5rem; }
+  .admin > p { color: var(--soft); }
+  form { display: grid; gap: 1rem; font-family: -apple-system, system-ui, sans-serif; margin: 1.5rem 0; }
+  label { display: grid; gap: .4rem; font-size: .95rem; color: var(--ink); }
+  input { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; }
+  .row { display: flex; gap: .5rem; }
+  button { padding: .6rem 1.2rem; border: 1px solid var(--accent); border-radius: 999px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--soft); border-color: var(--line); }
+  #state { margin: 0; min-height: 1.1em; font-size: .9rem; }
+  .note { color: var(--soft); font-size: .9rem; }
+  code { background: #efe9dd; padding: .1em .35em; border-radius: 4px; }
+</style>

@@ -71,6 +71,19 @@ import Base from '../layouts/Base.astro';
     statusEl.className = kind;
   }
 
+  // Persist this entry's edit token so the contributor can edit/delete it later.
+  // When this cookie expires (~90 days) or is cleared, they simply lose access.
+  function rememberOwner(id: string, token: string) {
+    let list: { id: string; token: string }[] = [];
+    try {
+      const c = document.cookie.split('; ').find((x) => x.startsWith('rk_owner='));
+      if (c) list = JSON.parse(decodeURIComponent(c.slice('rk_owner='.length)));
+    } catch {}
+    list.push({ id, token });
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = `rk_owner=${encodeURIComponent(JSON.stringify(list))}; path=/; max-age=${90 * 86400}; samesite=Lax${secure}`;
+  }
+
   async function uploadFile(file: File) {
     // Ask the backend for a presigned URL, then PUT the bytes straight to storage.
     const res = await fetch(PRESIGN_API, {
@@ -130,9 +143,11 @@ import Base from '../layouts/Base.astro';
         body: JSON.stringify(submission),
       });
       if (!res.ok) throw new Error('Submission failed');
+      const { id, editToken } = await res.json();
+      if (id && editToken) rememberOwner(id, editToken);
 
       form.reset();
-      setStatus('Thank you. Your memory has been shared. 🤍', 'ok');
+      setStatus('Thank you. Your memory has been shared. 🤍 You can edit or remove it from its page on this device.', 'ok');
     } catch (err) {
       setStatus((err as Error).message || 'Something went wrong. Please try again.', 'err');
     } finally {
