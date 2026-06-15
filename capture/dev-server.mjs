@@ -71,6 +71,15 @@ const saveTokens = async (o) => {
 };
 const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
 
+// Memory dates may be any date in the past, but never the future (a future date
+// is treated as an error and dropped). Returns YYYY-MM-DD or null.
+const validMemoryDate = (v, now = new Date()) => {
+  if (typeof v !== 'string' || !v) return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime()) || d.getTime() > now.getTime()) return null;
+  return v.slice(0, 10);
+};
+
 // True if the caller owns this entry (valid edit token) or is the admin.
 const authorize = async (id, token, adminToken) => {
   if (isAdmin(adminToken)) return true;
@@ -107,8 +116,10 @@ const server = createServer(async (req, res) => {
       const now = new Date();
       const id = `${now.toISOString().slice(0, 10)}-${slug(s.author.name)}-${Math.random().toString(36).slice(2, 6)}`;
 
-      const { email, ...rest } = s; // email stays private, never in the public entry
+      const { email, memoryDate, ...rest } = s; // email stays private, never in the public entry
       const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };
+      const md = validMemoryDate(memoryDate, now); // future/invalid dates are dropped
+      if (md) entry.memoryDate = md;
 
       await mkdir(ENTRIES, { recursive: true });
       await writeFile(join(ENTRIES, `${id}.json`), JSON.stringify(entry, null, 2) + '\n');
@@ -130,7 +141,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/update') {
-      const { id, token, adminToken, name, relationship, title, body } = JSON.parse((await readBody(req)).toString() || '{}');
+      const { id, token, adminToken, name, relationship, title, body, memoryDate } = JSON.parse((await readBody(req)).toString() || '{}');
       const file = safeEntryPath(id);
       if (!file) return send(res, 400, { error: 'bad id' });
       if (!(await authorize(id, token, adminToken))) return send(res, 403, { error: 'not allowed' });
@@ -141,6 +152,8 @@ const server = createServer(async (req, res) => {
       if (typeof name === 'string' && name.trim()) entry.author.name = name.trim();
       if (typeof title === 'string') entry.title = title.trim() || undefined; // '' removes it
       if (typeof relationship === 'string') entry.author.relationship = relationship.trim() || undefined;
+      if (memoryDate === '') delete entry.memoryDate; // cleared
+      else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
       entry.editedAt = new Date().toISOString();
       await writeFile(file, JSON.stringify(entry, null, 2) + '\n');
 

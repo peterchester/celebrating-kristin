@@ -28,6 +28,12 @@ import Base from '../layouts/Base.astro';
       </label>
 
       <label>
+        Date of memory (optional)
+        <input name="memoryDate" type="date" />
+        <small>When did this happen? Leave blank if it's not tied to a day.</small>
+      </label>
+
+      <label>
         Your memory <span class="req">*</span>
         <textarea name="body" rows="10" required placeholder="Take your time…"></textarea>
       </label>
@@ -65,6 +71,11 @@ import Base from '../layouts/Base.astro';
 
   const form = document.getElementById('memory-form') as HTMLFormElement;
   const statusEl = document.getElementById('status') as HTMLParagraphElement;
+
+  // Memory dates can be any time in the past, but not the future. Cap the picker
+  // at today (set at load so it's correct regardless of when the site was built).
+  const memoryDateInput = form.querySelector('input[name="memoryDate"]') as HTMLInputElement;
+  if (memoryDateInput) memoryDateInput.max = new Date().toISOString().slice(0, 10);
 
   function setStatus(msg: string, kind: 'ok' | 'err' | '' = '') {
     statusEl.textContent = msg;
@@ -125,6 +136,7 @@ import Base from '../layouts/Base.astro';
           relationship: String(fd.get('relationship') || '').trim() || undefined,
         },
         title: String(fd.get('title') || '').trim() || undefined,
+        memoryDate: String(fd.get('memoryDate') || '') || undefined, // validated server-side
         body: String(fd.get('body') || '').trim(),
         media,
         email: String(fd.get('email') || '').trim() || undefined, // private — backend stores separately

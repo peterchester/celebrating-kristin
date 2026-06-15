@@ -36,7 +36,8 @@ chronologically and never collide.
       "alt": "Orange sky over a rocky beach"      // optional, images only
     }
   ],
-  "submittedAt": "2026-06-14T18:32:00Z", // ISO 8601 UTC
+  "submittedAt": "2026-06-14T18:32:00Z", // ISO 8601 UTC — sorting only, never shown
+  "memoryDate": "1998-07-04",            // optional: when the memory happened (past only)
   "status": "published"                  // "published" | "hidden" (admin hide w/o deleting)
 }
 ```
@@ -50,6 +51,10 @@ must stay in sync** — Zod is the law, this is the explanation.
 ### Field notes
 
 - **`author.name`** — the only truly required identity field. No accounts, no logins.
+- **`submittedAt`** vs **`memoryDate`** — `submittedAt` orders the gallery (newest
+  first) but is *never displayed*. `memoryDate` is the optional date the memory
+  itself happened; it's the only date readers see, and only when given. It must be
+  in the past — future dates are treated as errors and dropped at capture time.
 - **`body`** — stored as plain text. Blank lines separate paragraphs. It is
   rendered through Astro's auto-escaping, so user text can never inject HTML/JS
   into the page. (We can upgrade to full Markdown later by adding a renderer; the

@@ -15,11 +15,17 @@ export async function getStaticPaths() {
 }
 
 const { entry, prevId, nextId } = Astro.props;
-const { author, title, body, media, submittedAt } = entry.data;
+const { author, title, body, media, memoryDate } = entry.data;
 
 // Blank lines separate paragraphs. Rendered via {p} so text is auto-escaped.
 const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-const dateLabel = submittedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+// submittedAt stays in the data (for gallery sorting) but is never shown. We only
+// surface a date when the contributor gave one for the memory itself. Format in
+// UTC so a date-only value doesn't slip to the previous day in the local zone.
+const dateLabel = memoryDate
+  ? memoryDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+  : null;
+const memoryDateInput = memoryDate ? memoryDate.toISOString().slice(0, 10) : '';
 
 // Where edit/delete requests go. Empty in a plain static build → controls stay
 // hidden and admin happens via the files (see README).
@@ -31,7 +37,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
     {title && <h1>{title}</h1>}
     <p class="byline">
       <strong>{author.name}</strong>{author.relationship && <span> · {author.relationship}</span>}
-      <span class="date"> · {dateLabel}</span>
+      {dateLabel && <span class="date"> · {dateLabel}</span>}
     </p>
 
     {media[0] && (
@@ -55,6 +61,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
       </div>
       <form id="ot-form" hidden>
         <label>Title<input name="title" type="text" /></label>
+        <label>Date of memory (optional)<input name="memoryDate" type="date" /></label>
         <label>Your name<input name="name" type="text" /></label>
         <label>How you knew Kristin<input name="relationship" type="text" /></label>
         <label>Your memory<textarea name="body" rows="10"></textarea></label>
@@ -104,7 +111,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
     });
   </script>
 
-  <script define:vars={{ id: entry.id, API_BASE, d: { title: title ?? '', body, name: author.name, rel: author.relationship ?? '' } }}>
+  <script define:vars={{ id: entry.id, API_BASE, d: { title: title ?? '', body, name: author.name, rel: author.relationship ?? '', memoryDate: memoryDateInput } }}>
     (function () {
       if (!API_BASE) return; // static build with no backend → file-based admin only
 
@@ -130,6 +137,8 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
         ? 'This is your memory — you can edit or remove it.'
         : 'Admin controls.';
       fld('title').value = d.title;
+      fld('memoryDate').value = d.memoryDate;
+      fld('memoryDate').max = new Date().toISOString().slice(0, 10); // no future dates
       fld('name').value = d.name;
       fld('relationship').value = d.rel;
       fld('body').value = d.body;
@@ -152,6 +161,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
         try {
           const r = await post('/update', {
             title: fld('title').value,
+            memoryDate: fld('memoryDate').value,
             name: fld('name').value,
             relationship: fld('relationship').value,
             body: fld('body').value,

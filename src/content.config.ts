@@ -30,7 +30,8 @@ const entries = defineCollection({
         }),
       )
       .default([]),
-    submittedAt: z.coerce.date(),
+    submittedAt: z.coerce.date(), // for sorting only — never shown to readers
+    memoryDate: z.coerce.date().optional(), // when the memory happened (optional, contributor-provided)
     editedAt: z.coerce.date().optional(),
     status: z.enum(['published', 'hidden']).default('published'),
   }),

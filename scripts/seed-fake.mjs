@@ -99,7 +99,7 @@ const aud = (n, caption) => ({ type: 'audio', src: `/media/fake/audio-${n}.wav`,
 const P = (...lines) => lines.join('\n\n');
 
 const memories = [
-  { author: { name: 'Maya Lindqvist', relationship: 'College roommate' }, title: 'The kitchen at 2am',
+  { author: { name: 'Maya Lindqvist', relationship: 'College roommate' }, title: 'The kitchen at 2am', memoryDate: '2004-11-02',
     body: P('We never cooked anything ambitious — it was always grilled cheese and whatever tea was in the cupboard. But she could turn a 2am kitchen into the safest room in the world.', 'I still make the tea the way she did. Too much honey.'),
     media: [img(1, 'The old apartment window', 'A soft gradient sky')] },
   { author: { name: 'Daniel Okafor', relationship: 'Bandmate' }, title: 'She heard the harmony first',
@@ -109,7 +109,7 @@ const memories = [
     body: P('Every August she\'d hand tomatoes over the fence like they were treasure. They kind of were.') },
   { author: { name: 'Greg Pham' }, title: '',
     body: P('I didn\'t know her long. We met twice, both times at the dog park, both times she remembered my dog\'s name and not mine. I loved that about her.', 'Some people make you feel like the world is a little less sharp around the edges. That was her, even to a near-stranger.') },
-  { author: { name: 'Aiyana Brooks', relationship: 'Sister' }, title: 'Cliffs at golden hour',
+  { author: { name: 'Aiyana Brooks', relationship: 'Sister' }, title: 'Cliffs at golden hour', memoryDate: '2015-08-22',
     body: P('We hiked this trail a hundred times growing up. She always stopped at the same spot.'),
     media: [img(2, 'The overlook', 'Golden gradient over a horizon'), img(5, 'Looking north'), img(7, 'The last bend')] },
   { author: { name: 'Marcus Reyes', relationship: 'Coworker' }, title: 'Her desk speech',
