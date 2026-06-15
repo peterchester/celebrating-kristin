@@ -1,15 +1,11 @@
 ---
 import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
+import MemoryCard from '../components/MemoryCard.astro';
 
 const entries = (await getCollection('entries'))
   .filter((e) => e.data.status !== 'hidden')
   .sort((a, b) => b.data.submittedAt.getTime() - a.data.submittedAt.getTime());
-
-const excerpt = (body: string) => {
-  const first = body.split(/\n\s*\n/)[0].trim();
-  return first.length > 240 ? first.slice(0, 240).trimEnd() + '…' : first;
-};
 ---
 
 <Base>
@@ -24,22 +20,9 @@ const excerpt = (body: string) => {
   <main class="wrap">
     {entries.length === 0 && <p class="empty">No memories yet. <a href="/share">Be the first to share one.</a></p>}
 
-    <ul class="entries">
-      {entries.map((e) => (
-        <li>
-          <a class="card" href={`/entry/${e.id}`}>
-            {e.data.media[0]?.type === 'image' && (
-              <img class="thumb" src={e.data.media[0].src} alt={e.data.media[0].alt ?? ''} loading="lazy" />
-            )}
-            <div class="card-body">
-              {e.data.title && <h2>{e.data.title}</h2>}
-              <p class="byline">{e.data.author.name}{e.data.author.relationship && <span> · {e.data.author.relationship}</span>}</p>
-              <p class="excerpt">{excerpt(e.data.body)}</p>
-            </div>
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div class="masonry">
+      {entries.map((e) => <MemoryCard entry={e} />)}
+    </div>
   </main>
 </Base>
 
@@ -103,14 +86,14 @@ const excerpt = (body: string) => {
     }
   }
 
-  main { padding-top: 2.5rem; }
+  main { padding-top: 2.5rem; max-width: 64rem; }
   .empty { text-align: center; color: var(--soft); }
-  .entries { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.5rem; }
-  .card { display: block; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; transition: box-shadow .15s ease, transform .15s ease; }
-  .card:hover { box-shadow: 0 6px 24px rgba(0,0,0,.07); transform: translateY(-2px); }
-  .thumb { width: 100%; height: 220px; object-fit: cover; display: block; }
-  .card-body { padding: 1.25rem 1.5rem 1.5rem; }
-  .card h2 { margin: 0 0 .25rem; font-weight: 400; font-size: 1.5rem; }
-  .byline { margin: 0 0 .6rem; color: var(--soft); font-size: .9rem; font-family: -apple-system, system-ui, sans-serif; }
-  .excerpt { margin: 0; }
+
+  /* Masonry via CSS columns — no JS, handles wildly varying card heights, and
+     cards never split across columns (break-inside: avoid, set on the card). */
+  .masonry {
+    column-width: 19rem;
+    column-gap: 1.25rem;
+  }
+  .masonry > :global(.card) { margin: 0 0 1.25rem; }
 </style>

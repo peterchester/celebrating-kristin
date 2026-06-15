@@ -4,16 +4,17 @@
 interface Props {
   type: 'image' | 'audio' | 'video';
   src: string;
+  poster?: string;
   caption?: string;
   alt?: string;
 }
-const { type, src, caption, alt } = Astro.props;
+const { type, src, poster, caption, alt } = Astro.props;
 ---
 
 <figure class="media">
   {type === 'image' && <img src={src} alt={alt ?? caption ?? ''} loading="lazy" />}
   {type === 'audio' && <audio controls preload="none" src={src}></audio>}
-  {type === 'video' && <video controls preload="metadata" playsinline src={src}></video>}
+  {type === 'video' && <video controls preload="metadata" playsinline src={src} poster={poster}></video>}
   {caption && <figcaption>{caption}</figcaption>}
 </figure>
 

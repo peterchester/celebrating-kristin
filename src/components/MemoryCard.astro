@@ -1,0 +1,137 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  entry: CollectionEntry<'entries'>;
+}
+const { entry } = Astro.props;
+const { author, title, body, media } = entry.data;
+
+// Decide how the card leads visually, gracefully handling every case:
+// a photo → show it; video → its poster + play badge; audio-only → a generated
+// audio cover; nothing → a typographic, cover-less card.
+const firstImage = media.find((m) => m.type === 'image');
+const firstVideo = media.find((m) => m.type === 'video');
+const hasAudio = media.some((m) => m.type === 'audio');
+const photoCount = media.filter((m) => m.type === 'image').length;
+
+const cover = firstImage
+  ? { src: firstImage.src, alt: firstImage.alt ?? firstImage.caption ?? '' }
+  : firstVideo?.poster
+    ? { src: firstVideo.poster, alt: '' }
+    : null;
+
+const kind = firstImage ? 'image' : firstVideo ? 'video' : hasAudio ? 'audio' : 'text';
+
+const excerpt = (() => {
+  const first = body.split(/\n\s*\n/)[0].trim();
+  const limit = kind === 'text' ? 320 : 180;
+  return first.length > limit ? first.slice(0, limit).trimEnd() + '…' : first;
+})();
+---
+
+<a class={`card kind-${kind}`} href={`/entry/${entry.id}`}>
+  {cover && (
+    <div class="cover">
+      <img src={cover.src} alt={cover.alt} loading="lazy" />
+      {kind === 'video' && (
+        <span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg></span>
+      )}
+    </div>
+  )}
+
+  {kind === 'audio' && (
+    <div class="cover audio-cover" aria-hidden="true">
+      <svg class="wave" viewBox="0 0 120 40" preserveAspectRatio="none">
+        {[6, 14, 9, 22, 30, 18, 26, 34, 20, 12, 28, 16, 24, 10, 18, 8].map((h, i) => (
+          <rect x={i * 7.5 + 2} y={20 - h / 2} width="3.5" height={h} rx="1.75" />
+        ))}
+      </svg>
+      <span class="badge">♪ Audio</span>
+    </div>
+  )}
+
+  <div class="body">
+    {title && <h2>{title}</h2>}
+    <p class="byline">
+      {author.name}{author.relationship && <span> · {author.relationship}</span>}
+    </p>
+    <p class="excerpt">{excerpt}</p>
+
+    {(photoCount > 1 || firstVideo || (hasAudio && kind !== 'audio')) && (
+      <p class="chips">
+        {photoCount > 1 && <span class="chip">◳ {photoCount} photos</span>}
+        {firstVideo && <span class="chip">▶ video</span>}
+        {hasAudio && kind !== 'audio' && <span class="chip">♪ audio</span>}
+      </p>
+    )}
+  </div>
+</a>
+
+<style>
+  .card {
+    display: block;
+    break-inside: avoid;
+    text-decoration: none;
+    color: inherit;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+  }
+  .card:hover { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09); transform: translateY(-3px); }
+
+  .cover { position: relative; line-height: 0; background: var(--line); }
+  .cover img { width: 100%; height: auto; display: block; }
+
+  .play {
+    position: absolute; inset: 0; margin: auto;
+    width: 54px; height: 54px; display: grid; place-items: center;
+    background: rgba(0, 0, 0, 0.45); border-radius: 50%;
+    backdrop-filter: blur(2px);
+  }
+  .play svg { width: 26px; height: 26px; fill: #fff; margin-left: 2px; }
+
+  .audio-cover {
+    height: 132px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 0.75rem;
+    background: linear-gradient(135deg, #efe7da, #d8c6a8);
+  }
+  .wave { width: 60%; height: 40px; }
+  .wave rect { fill: var(--accent); opacity: 0.8; }
+  .audio-cover .badge {
+    font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
+    color: var(--accent); letter-spacing: 0.04em; line-height: 1;
+  }
+
+  .body { padding: 1.2rem 1.4rem 1.4rem; }
+  .card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 1.45rem; line-height: 1.25; }
+  .byline {
+    margin: 0 0 0.7rem; color: var(--soft);
+    font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem;
+  }
+  .excerpt { margin: 0; }
+
+  /* Text-only memories get a warmer, quote-led treatment so they hold their own
+     in the grid instead of looking empty. */
+  .kind-text { background: var(--paper); border-color: #e7ddcb; }
+  .kind-text .body { padding: 1.6rem 1.5rem; position: relative; }
+  .kind-text .body::before {
+    content: '\201C'; position: absolute; top: 0.1rem; left: 1.1rem;
+    font-size: 3.4rem; line-height: 1; color: var(--accent); opacity: 0.28;
+  }
+  .kind-text h2, .kind-text .excerpt { position: relative; }
+  .kind-text .excerpt { font-size: 1.12rem; line-height: 1.65; }
+  .kind-text h2 { margin-top: 0.6rem; }
+
+  .chips {
+    margin: 0.9rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem;
+    font-family: -apple-system, system-ui, sans-serif;
+  }
+  .chip {
+    font-size: 0.72rem; color: var(--soft); letter-spacing: 0.03em;
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.18rem 0.6rem;
+  }
+</style>

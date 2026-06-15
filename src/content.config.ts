@@ -24,6 +24,7 @@ const entries = defineCollection({
         z.object({
           type: z.enum(['image', 'audio', 'video']),
           src: z.string(), // path under /public, e.g. /media/<id>/file.jpg
+          poster: z.string().optional(), // video thumbnail image
           caption: z.string().optional(),
           alt: z.string().optional(),
         }),
