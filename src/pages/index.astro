@@ -13,8 +13,8 @@ const excerpt = (body: string) => {
 ---
 
 <Base>
-  <header class="site">
-    <div class="wrap">
+  <header class="site hero">
+    <div class="hero-text">
       <h1>Remembering Kristin</h1>
       <p>A place to gather stories, reflections, and anything else that we might want to revisit in the years to come.</p>
       <a class="share-cta" href="/share">Share a memory</a>
@@ -44,6 +44,65 @@ const excerpt = (body: string) => {
 </Base>
 
 <style>
+  /* Photo hero — Kristin sits on the left of the image, so the text floats over
+     the open space on the right. A diagonal scrim keeps it legible over the fog. */
+  .site.hero {
+    position: relative;
+    min-height: min(80vh, 760px);
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border-bottom: none;
+    background-image:
+      linear-gradient(105deg, rgba(28,24,20,0) 38%, rgba(28,24,20,0.42) 70%, rgba(28,24,20,0.62) 100%),
+      url('/img/header.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .hero-text {
+    margin-left: auto;
+    max-width: 30rem;
+    padding: 2rem clamp(1.25rem, 5vw, 4rem);
+    text-align: right;
+    color: #fff;
+  }
+  .hero-text h1 {
+    font-weight: 400;
+    font-size: clamp(2.3rem, 6vw, 3.4rem);
+    line-height: 1.1;
+    letter-spacing: .01em;
+    margin: 0 0 .6rem;
+    text-shadow: 0 1px 24px rgba(0,0,0,.4);
+  }
+  .hero-text p {
+    margin: 0 0 1.5rem;
+    color: rgba(255,255,255,.94);
+    font-style: italic;
+    text-shadow: 0 1px 12px rgba(0,0,0,.45);
+  }
+  .hero-text .share-cta { box-shadow: 0 4px 18px rgba(0,0,0,.25); }
+
+  /* On narrow screens the image crops to a portrait; keep Kristin in frame and
+     move the text to the bottom over a vertical scrim so it always reads. */
+  @media (max-width: 640px) {
+    .site.hero {
+      min-height: 72vh;
+      align-items: flex-end;
+      background-position: 32% center;
+      background-image:
+        linear-gradient(to bottom, rgba(28,24,20,0) 30%, rgba(28,24,20,0.35) 60%, rgba(28,24,20,0.72) 100%),
+        url('/img/header.jpg');
+    }
+    .hero-text {
+      margin: 0;
+      max-width: none;
+      width: 100%;
+      text-align: center;
+      padding-bottom: 2.5rem;
+    }
+  }
+
   main { padding-top: 2.5rem; }
   .empty { text-align: center; color: var(--soft); }
   .entries { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.5rem; }
