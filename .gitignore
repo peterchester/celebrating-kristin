@@ -9,3 +9,11 @@ originals/
 capture/.env
 capture/private/
 *.private.json
+
+# Git tracks CODE only — submitted content (entries + uploaded media) lives in
+# the live store / locally, and is assembled into the static build at deploy
+# ("freeze") time. One example of each is kept so the repo builds on a fresh clone.
+src/content/entries/*.json
+!src/content/entries/2026-06-14-example.json
+public/media/*
+!public/media/2026-06-14-example/
