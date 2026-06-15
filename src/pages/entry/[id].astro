@@ -14,6 +14,10 @@ const { author, title, body, media, submittedAt } = entry.data;
 // Blank lines separate paragraphs. Rendered via {p} so text is auto-escaped.
 const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
 const dateLabel = submittedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+// Where edit/delete requests go. Empty in a plain static build → controls stay
+// hidden and admin happens via the files (see README).
+const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http://localhost:8787' : '');
 ---
 
 <Base title={title ? `${title} — Remembering Kristin` : `A memory from ${author.name}`}>
