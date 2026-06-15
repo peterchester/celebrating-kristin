@@ -1,0 +1,83 @@
+# Data model
+
+Everything in this project keys off one idea: **one submission = one JSON file.**
+Those files are the source of truth. The capture form writes them; the static
+site reads them; git stores them. Get this shape right and both phases fall out
+of it for free.
+
+## One entry
+
+Each story is a single JSON file under `src/content/entries/`, named with a
+sortable, URL-safe id:
+
+```
+src/content/entries/2026-06-14-jane-doe-big-sur.json
+```
+
+The filename (minus `.json`) becomes the entry's `id` and its page URL
+(`/entry/2026-06-14-jane-doe-big-sur`). Use `YYYY-MM-DD-slug` so files sort
+chronologically and never collide.
+
+### Schema
+
+```jsonc
+{
+  "author": {
+    "name": "Jane Doe",                 // required — shown publicly
+    "relationship": "College roommate"  // optional — free text, shown publicly
+  },
+  "title": "The road trip to Big Sur",  // optional — a headline for the story
+  "body": "We left at 4am...\n\nBy noon we were...",  // required — the story, plain text / light Markdown
+  "media": [                            // optional — 0 or more attachments
+    {
+      "type": "image",                  // "image" | "audio" | "video"
+      "src": "/media/2026-06-14-jane-doe-big-sur/sunset.jpg",
+      "caption": "Pfeiffer Beach, summer '98",  // optional
+      "alt": "Orange sky over a rocky beach"      // optional, images only
+    }
+  ],
+  "submittedAt": "2026-06-14T18:32:00Z", // ISO 8601 UTC
+  "status": "published"                  // "published" | "hidden" (admin hide w/o deleting)
+}
+```
+
+The authoritative, machine-checked version of this schema lives in
+[`src/content.config.ts`](../src/content.config.ts) as a Zod schema. Astro
+validates every entry against it at build time, so a malformed submission fails
+the build instead of silently rendering broken. **That file and this document
+must stay in sync** — Zod is the law, this is the explanation.
+
+### Field notes
+
+- **`author.name`** — the only truly required identity field. No accounts, no logins.
+- **`body`** — stored as plain text. Blank lines separate paragraphs. It is
+  rendered through Astro's auto-escaping, so user text can never inject HTML/JS
+  into the page. (We can upgrade to full Markdown later by adding a renderer; the
+  stored format doesn't change.)
+- **`media[].src`** — a path under `public/`, i.e. `/media/<entry-id>/<file>`.
+  During capture these may temporarily be S3 keys; the *freeze* step downloads
+  them into `public/media/` and rewrites the paths to local ones.
+- **`status: "hidden"`** — lets an admin pull a story from the public site
+  without destroying the submission. The archive build skips hidden entries.
+
+### Deliberately NOT in the archive
+
+- **Email / contact info.** If the capture form collects an email (for "let me
+  know when it's live" or moderation contact), it is kept in a *separate private
+  store* — never written into these public JSON files. The Zod schema strips any
+  unknown keys, so even an accidental `email` field won't reach the built site.
+- **IP addresses, user agents, raw upload metadata.** Capture-time only.
+
+## Media format rules (future-proofing)
+
+The archive must still open in 20 years, so the freeze step normalizes media to
+universal, non-proprietary formats:
+
+| Kind  | Store as            | Notes                                              |
+|-------|---------------------|----------------------------------------------------|
+| Photo | JPEG (or PNG)       | Strip EXIF GPS; downscale huge phone shots.         |
+| Audio | MP3                 | ~128–192 kbps is plenty for voice/memories.         |
+| Video | MP4 (H.264 + AAC)   | **Transcode iPhone HEVC/.mov → MP4** so it plays everywhere. |
+
+Always keep the **originals** in a separate `originals/` archive (off the public
+site) in case you ever want to re-encode.

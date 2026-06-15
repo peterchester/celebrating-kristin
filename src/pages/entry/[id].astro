@@ -1,0 +1,44 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import Media from '../../components/Media.astro';
+
+export async function getStaticPaths() {
+  const entries = (await getCollection('entries')).filter((e) => e.data.status !== 'hidden');
+  return entries.map((entry) => ({ params: { id: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { author, title, body, media, submittedAt } = entry.data;
+
+// Blank lines separate paragraphs. Rendered via {p} so text is auto-escaped.
+const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+const dateLabel = submittedAt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+---
+
+<Base title={title ? `${title} — Remembering Kristin` : `A memory from ${author.name}`}>
+  <main class="wrap entry">
+    <p class="back"><a href="/">← All memories</a></p>
+
+    {title && <h1>{title}</h1>}
+    <p class="byline">
+      <strong>{author.name}</strong>{author.relationship && <span> · {author.relationship}</span>}
+      <span class="date"> · {dateLabel}</span>
+    </p>
+
+    <article>
+      {paragraphs.map((p) => <p>{p}</p>)}
+    </article>
+
+    {media.map((m) => <Media type={m.type} src={m.src} caption={m.caption} alt={m.alt} />)}
+  </main>
+</Base>
+
+<style>
+  .entry { padding-top: 2.5rem; }
+  .back { font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin-bottom: 2rem; }
+  .entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 .4rem; }
+  .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; margin: 0 0 2rem; }
+  .byline strong { color: var(--ink); font-weight: 600; }
+  article p { margin: 0 0 1.3rem; }
+</style>

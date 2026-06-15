@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.DS_Store
+*.log
+
+# Keep originals + private capture data out of the repo
+originals/
+capture/.env
+capture/private/
+*.private.json

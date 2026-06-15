@@ -1,0 +1,18 @@
+{
+  "author": {
+    "name": "Example Friend",
+    "relationship": "College roommate"
+  },
+  "title": "The road trip we never planned",
+  "body": "This is an example entry so the site has something to render. Delete it before you go live.\n\nKristin had a way of turning a wrong turn into the best part of the day. We meant to drive an hour up the coast and somehow ended up watching the sun go down three hours north, eating gas-station sandwiches and laughing about nothing.\n\nI think about that a lot. How easy she made it to just keep going.",
+  "media": [
+    {
+      "type": "image",
+      "src": "/media/2026-06-14-example/placeholder.svg",
+      "caption": "A placeholder image — replace with a real photo.",
+      "alt": "A soft gradient placeholder"
+    }
+  ],
+  "submittedAt": "2026-06-14T18:32:00Z",
+  "status": "published"
+}

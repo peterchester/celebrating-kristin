@@ -1,0 +1,167 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Share a memory — Remembering Kristin">
+  <main class="wrap form-page">
+    <p class="back"><a href="/">← All memories</a></p>
+    <h1>Share a memory</h1>
+    <p class="lede">
+      A story, a moment, something she said. As long or as short as you like.
+      You can add photos, a voice recording, or a video too.
+    </p>
+
+    <form id="memory-form">
+      <label>
+        Your name <span class="req">*</span>
+        <input name="name" type="text" required autocomplete="name" />
+      </label>
+
+      <label>
+        How did you know Kristin?
+        <input name="relationship" type="text" placeholder="Friend, cousin, coworker…" />
+      </label>
+
+      <label>
+        Title (optional)
+        <input name="title" type="text" placeholder="Give your memory a name" />
+      </label>
+
+      <label>
+        Your memory <span class="req">*</span>
+        <textarea name="body" rows="10" required placeholder="Take your time…"></textarea>
+      </label>
+
+      <label>
+        Add photos, audio, or video (optional)
+        <input name="media" type="file" multiple accept="image/*,audio/*,video/*" />
+        <small>Large videos are fine — they upload directly and securely.</small>
+      </label>
+
+      <label class="email">
+        Your email (optional, never shown publicly)
+        <input name="email" type="email" autocomplete="email" placeholder="So we can reach you if needed" />
+      </label>
+
+      <button type="submit">Share this memory</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+</Base>
+
+<script>
+  // ── Capture backend ────────────────────────────────────────────────────────
+  // Point these at your serverless endpoints when Phase 1 is wired up.
+  //   PRESIGN_API → returns { url, key } for a direct-to-S3 upload
+  //   SUBMIT_API  → accepts the submission JSON, saves one entry file
+  // In `npm run dev` these default to the local mock backend
+  // (capture/dev-server.mjs) so you can test the full loop without AWS.
+  // In a production build they're empty unless you set PUBLIC_PRESIGN_API /
+  // PUBLIC_SUBMIT_API — and while empty the form runs in "preview" mode,
+  // logging the exact JSON it WOULD send so you can see the data model.
+  const DEV = import.meta.env.DEV;
+  const PRESIGN_API = import.meta.env.PUBLIC_PRESIGN_API ?? (DEV ? 'http://localhost:8787/presign' : '');
+  const SUBMIT_API = import.meta.env.PUBLIC_SUBMIT_API ?? (DEV ? 'http://localhost:8787/submit' : '');
+
+  const form = document.getElementById('memory-form') as HTMLFormElement;
+  const statusEl = document.getElementById('status') as HTMLParagraphElement;
+
+  function setStatus(msg: string, kind: 'ok' | 'err' | '' = '') {
+    statusEl.textContent = msg;
+    statusEl.className = kind;
+  }
+
+  async function uploadFile(file: File) {
+    // Ask the backend for a presigned URL, then PUT the bytes straight to storage.
+    const res = await fetch(PRESIGN_API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
+    });
+    if (!res.ok) throw new Error('Could not get upload URL');
+    const { url, key } = await res.json();
+    const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
+    if (!put.ok) throw new Error(`Upload failed for ${file.name}`);
+    const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'video';
+    return { type: kind, src: key, caption: '' };
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button')!;
+    btn.disabled = true;
+    setStatus('Sending…');
+
+    try {
+      const fd = new FormData(form);
+      const files = (form.querySelector('input[name="media"]') as HTMLInputElement).files;
+
+      const media = [];
+      if (files && files.length && PRESIGN_API) {
+        for (const file of Array.from(files)) {
+          setStatus(`Uploading ${file.name}…`);
+          media.push(await uploadFile(file));
+        }
+      }
+
+      // The submission object — mirrors docs/DATA-MODEL.md (the backend assigns
+      // the id/filename and submittedAt; email is kept private, not in the entry).
+      const submission = {
+        author: {
+          name: String(fd.get('name') || '').trim(),
+          relationship: String(fd.get('relationship') || '').trim() || undefined,
+        },
+        title: String(fd.get('title') || '').trim() || undefined,
+        body: String(fd.get('body') || '').trim(),
+        media,
+        email: String(fd.get('email') || '').trim() || undefined, // private — backend stores separately
+      };
+
+      if (!SUBMIT_API) {
+        console.log('[preview] would submit:', submission);
+        setStatus('Preview mode: backend not connected yet. Your submission was logged to the console.', 'ok');
+        btn.disabled = false;
+        return;
+      }
+
+      const res = await fetch(SUBMIT_API, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(submission),
+      });
+      if (!res.ok) throw new Error('Submission failed');
+
+      form.reset();
+      setStatus('Thank you. Your memory has been shared. 🤍', 'ok');
+    } catch (err) {
+      setStatus((err as Error).message || 'Something went wrong. Please try again.', 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+
+<style>
+  .form-page { padding-top: 2.5rem; max-width: 38rem; }
+  .back { font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin-bottom: 1.5rem; }
+  h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 .5rem; }
+  .lede { color: var(--soft); margin: 0 0 2rem; }
+  form { display: grid; gap: 1.4rem; font-family: -apple-system, system-ui, sans-serif; }
+  label { display: grid; gap: .4rem; font-size: .95rem; }
+  .req { color: #b4451f; }
+  input, textarea {
+    font: inherit; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 8px;
+    background: #fff; color: var(--ink); width: 100%;
+  }
+  textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  small { color: var(--soft); }
+  button {
+    justify-self: start; padding: .8rem 1.6rem; border: none; border-radius: 999px;
+    background: var(--accent); color: #fff; font: inherit; font-size: 1rem; cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: default; }
+  #status { margin: 0; min-height: 1.2em; }
+  #status.ok { color: #3c6b4a; }
+  #status.err { color: #b4451f; }
+</style>

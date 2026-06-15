@@ -1,0 +1,63 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+}
+const { title = 'Remembering Kristin', description = 'Stories, memories, and reflections.' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+    <style is:global>
+      :root {
+        --ink: #2c2722;
+        --soft: #7a6f5d;
+        --line: #e3dccf;
+        --paper: #faf7f1;
+        --accent: #8a6d4b;
+        --maxw: 44rem;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Georgia, 'Times New Roman', serif;
+        line-height: 1.7;
+        font-size: 1.05rem;
+      }
+      a { color: var(--accent); }
+      .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+      header.site {
+        text-align: center;
+        padding: 4rem 1.25rem 2.5rem;
+        border-bottom: 1px solid var(--line);
+      }
+      header.site h1 { font-size: 2.6rem; margin: 0 0 .4rem; font-weight: 400; letter-spacing: .01em; }
+      header.site p { color: var(--soft); margin: 0 auto; max-width: 32rem; font-style: italic; }
+      .share-cta {
+        display: inline-block; margin-top: 1.5rem; padding: .7rem 1.4rem;
+        background: var(--accent); color: #fff; text-decoration: none; border-radius: 999px;
+        font-family: -apple-system, system-ui, sans-serif; font-size: .95rem;
+      }
+      .share-cta:hover { opacity: .9; }
+      footer.site { text-align: center; color: var(--soft); font-size: .85rem; padding: 3rem 1.25rem; border-top: 1px solid var(--line); margin-top: 4rem; }
+      footer.site a { color: var(--soft); }
+    </style>
+  </head>
+  <body>
+    <slot />
+    <footer class="site">
+      <div class="wrap">
+        <p>Made with love. <a href="/share">Share a memory →</a></p>
+      </div>
+    </footer>
+  </body>
+</html>
