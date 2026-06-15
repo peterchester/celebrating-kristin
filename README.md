@@ -22,7 +22,7 @@ Read [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) first — everything keys off it
 ## Project layout
 
 ```
-remembering-kristin/
+celebrating-kristin/
 ├── docs/DATA-MODEL.md        # the spec everything keys off
 ├── src/
 │   ├── content.config.ts     # Zod schema = the enforced data model

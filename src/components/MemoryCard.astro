@@ -76,12 +76,11 @@ const excerpt = (() => {
     color: inherit;
     background: #fff;
     border: 1px solid var(--line);
-    border-radius: 12px;
+    border-radius: 0;
     overflow: hidden;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-    transition: box-shadow 0.18s ease, transform 0.18s ease;
+    transition: box-shadow 0.18s ease;
   }
-  .card:hover { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09); transform: translateY(-3px); }
+  .card:hover { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12); position: relative; z-index: 1; }
 
   .cover { position: relative; line-height: 0; background: var(--line); }
   .cover img { width: 100%; height: auto; display: block; }
