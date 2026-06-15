@@ -4,11 +4,17 @@ import Base from '../../layouts/Base.astro';
 import Media from '../../components/Media.astro';
 
 export async function getStaticPaths() {
-  const entries = (await getCollection('entries')).filter((e) => e.data.status !== 'hidden');
-  return entries.map((entry) => ({ params: { id: entry.id }, props: { entry } }));
+  // Same order as the home gallery (newest first) so prev/next match what you see.
+  const all = (await getCollection('entries'))
+    .filter((e) => e.data.status !== 'hidden')
+    .sort((a, b) => b.data.submittedAt.getTime() - a.data.submittedAt.getTime());
+  return all.map((entry, i) => ({
+    params: { id: entry.id },
+    props: { entry, prevId: all[i - 1]?.id ?? null, nextId: all[i + 1]?.id ?? null },
+  }));
 }
 
-const { entry } = Astro.props;
+const { entry, prevId, nextId } = Astro.props;
 const { author, title, body, media, submittedAt } = entry.data;
 
 // Blank lines separate paragraphs. Rendered via {p} so text is auto-escaped.
@@ -22,8 +28,6 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
 
 <Base title={title ? `${title} — Celebrating Kristin` : `A memory from ${author.name}`}>
   <main class="wrap entry">
-    <p class="back"><a href="/">← All memories</a></p>
-
     {title && <h1>{title}</h1>}
     <p class="byline">
       <strong>{author.name}</strong>{author.relationship && <span> · {author.relationship}</span>}
@@ -58,6 +62,43 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
       </form>
     </section>
   </main>
+
+  <nav class="memory-nav" aria-label="Memory navigation">
+    {prevId ? (
+      <a class="nav-btn" href={`/entry/${prevId}`} rel="prev" aria-label="Previous memory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      </a>
+    ) : (
+      <span class="nav-btn disabled" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+      </span>
+    )}
+
+    <a class="nav-btn home" href="/" aria-label="All memories — home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.5 12 4l8.5 7.5" /><path d="M5.5 10v9.5h13V10" /></svg>
+    </a>
+
+    {nextId ? (
+      <a class="nav-btn" href={`/entry/${nextId}`} rel="next" aria-label="Next memory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+      </a>
+    ) : (
+      <span class="nav-btn disabled" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7" /></svg>
+      </span>
+    )}
+  </nav>
+
+  <script define:vars={{ prevId, nextId }}>
+    // Left/right arrow keys navigate, but never while typing in a field.
+    document.addEventListener('keydown', (e) => {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowLeft' && prevId) location.href = '/entry/' + prevId;
+      if (e.key === 'ArrowRight' && nextId) location.href = '/entry/' + nextId;
+    });
+  </script>
 
   <script define:vars={{ id: entry.id, API_BASE, d: { title: title ?? '', body, name: author.name, rel: author.relationship ?? '' } }}>
     (function () {
@@ -136,7 +177,6 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
 
 <style>
   .entry { padding-top: 2.5rem; }
-  .back { font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin-bottom: 2rem; }
   .entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 .4rem; }
   .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; margin: 0 0 2rem; }
   .byline strong { color: var(--ink); font-weight: 600; }
@@ -159,4 +199,42 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
   .ot-buttons { display: flex; gap: .5rem; }
   .ot-buttons button[type="submit"] { background: var(--accent); color: #fff; border-color: var(--accent); }
   #ot-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
+
+  /* Floating prev / home / next bar. 46px hit targets, safe-area aware, blurred. */
+  .memory-nav {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.3rem;
+    background: rgba(250, 247, 241, 0.9);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 8px 28px rgba(40, 30, 20, 0.16);
+  }
+  .nav-btn {
+    -webkit-tap-highlight-color: transparent;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    color: var(--ink);
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .nav-btn svg { width: 22px; height: 22px; display: block; }
+  .nav-btn.home svg { width: 23px; height: 23px; }
+  .nav-btn:hover { background: #fff; color: var(--accent); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .nav-btn.disabled { color: #d9cfbe; pointer-events: none; }
+
+  /* Keep the floating bar from covering the page footer. */
+  :global(footer.site) { margin-bottom: 5rem; }
 </style>
