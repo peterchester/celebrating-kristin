@@ -17,10 +17,15 @@
 # Reads BUCKET / SITE_DOMAIN / ROOT_DOMAIN from .deploy.env, then writes the
 # resulting DISTRIBUTION_ID back into .deploy.env so ./deploy.sh just works.
 
-set -euo pipefail
+# Note: deliberately NOT using `set -u`. macOS ships bash 3.2 (2007), whose
+# nounset has a bug that falsely flags set variables as unbound. We default
+# every variable with ${VAR:-} anyway, so nounset buys us nothing here.
+set -eo pipefail
 cd "$(dirname "$0")"
 
-[ -f .deploy.env ] && set -a && . ./.deploy.env && set +a
+if [ -f .deploy.env ]; then
+  set -a; . ./.deploy.env; set +a
+fi
 
 BUCKET="${BUCKET:-}"
 SITE_DOMAIN="${SITE_DOMAIN:-}"
@@ -50,7 +55,7 @@ aws sts get-caller-identity >/dev/null 2>&1 || {
 }
 
 # ── Find the Route 53 hosted zone for the root domain ────────────────────────
-echo "→ Looking up Route 53 hosted zone for $ROOT_DOMAIN…"
+echo "→ Looking up Route 53 hosted zone for $ROOT_DOMAIN..."
 ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "${ROOT_DOMAIN}." \
   --query "HostedZones[?Name=='${ROOT_DOMAIN}.'].Id | [0]" --output text)
 if [ -z "$ZONE_ID" ] || [ "$ZONE_ID" = "None" ]; then
@@ -62,7 +67,7 @@ ZONE_ID="${ZONE_ID#/hostedzone/}"
 echo "  hosted zone: $ZONE_ID"
 
 # ── Deploy the stack ─────────────────────────────────────────────────────────
-echo "→ Deploying CloudFormation stack '$STACK_NAME' in $REGION…"
+echo "→ Deploying CloudFormation stack '$STACK_NAME' in $REGION..."
 echo "  Provisions S3 + CloudFront + ACM + DNS, and waits for the TLS cert to"
 echo "  validate and CloudFront to roll out. This typically takes 5–25 minutes."
 aws cloudformation deploy \

@@ -18,11 +18,15 @@
 # This script only UPDATES an already-provisioned bucket/distribution. The
 # one-time setup (create bucket, ACM cert, CloudFront, DNS) is separate.
 
-set -euo pipefail
+# Note: deliberately NOT using `set -u` — macOS bash 3.2 has a nounset bug that
+# falsely flags set variables as unbound. Variables are defaulted with ${VAR:-}.
+set -eo pipefail
 cd "$(dirname "$0")"
 
 # ── Load config ──────────────────────────────────────────────────────────────
-[ -f .deploy.env ] && set -a && . ./.deploy.env && set +a
+if [ -f .deploy.env ]; then
+  set -a; . ./.deploy.env; set +a
+fi
 
 BUCKET="${BUCKET:-}"
 DISTRIBUTION_ID="${DISTRIBUTION_ID:-}"
@@ -46,7 +50,7 @@ aws sts get-caller-identity >/dev/null 2>&1 || {
 }
 
 # ── 1. Build ─────────────────────────────────────────────────────────────────
-echo "→ Building site…"
+echo "→ Building site..."
 npm run build
 
 if [ ! -d dist ] || [ -z "$(ls -A dist 2>/dev/null)" ]; then
@@ -65,7 +69,7 @@ fi
 
 # ── 2. Upload ────────────────────────────────────────────────────────────────
 # Hashed, content-addressed assets in _astro/ never change → cache forever.
-echo "→ Uploading immutable assets (_astro/)…"
+echo "→ Uploading immutable assets (_astro/)..."
 if [ -d dist/_astro ]; then
   aws s3 sync dist/_astro "s3://$BUCKET/_astro" \
     --delete \
@@ -74,7 +78,7 @@ fi
 
 # Everything else (HTML, media, json) → no-cache so a redeploy shows up at once.
 # (CloudFront is invalidated below regardless; this controls the browser.)
-echo "→ Uploading pages + media…"
+echo "→ Uploading pages + media..."
 aws s3 sync dist "s3://$BUCKET" \
   --delete \
   --exclude "_astro/*" \
@@ -82,7 +86,7 @@ aws s3 sync dist "s3://$BUCKET" \
 
 # ── 3. Invalidate CloudFront ─────────────────────────────────────────────────
 if [ -n "$DISTRIBUTION_ID" ]; then
-  echo "→ Invalidating CloudFront cache…"
+  echo "→ Invalidating CloudFront cache..."
   ID=$(aws cloudfront create-invalidation \
         --distribution-id "$DISTRIBUTION_ID" \
         --paths "/*" \
