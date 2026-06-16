@@ -30,9 +30,25 @@ const memoryDateInput = memoryDate ? memoryDate.toISOString().slice(0, 10) : '';
 // Where edit/delete requests go. Empty in a plain static build → controls stay
 // hidden and admin happens via the files (see README).
 const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http://localhost:8787' : '');
+
+// A visual lead (image, or video + its poster) becomes a full-bleed banner at the
+// very top of the page. An audio lead has no banner and stays inline above the
+// text. Either way, any remaining media follow below the text.
+const lead = media[0];
+const banner = lead && (lead.type === 'image' || lead.type === 'video') ? lead : null;
 ---
 
 <Base title={title ? `${title} — Celebrating Kristin` : `A memory from ${author.name}`}>
+  {banner && (
+    <div class="post-banner">
+      {banner.type === 'image' && <img src={banner.src} alt={banner.alt ?? banner.caption ?? ''} />}
+      {banner.type === 'video' && (
+        <video src={banner.src} poster={banner.poster} controls playsinline preload="metadata"></video>
+      )}
+      {banner.caption && <p class="banner-caption">{banner.caption}</p>}
+    </div>
+  )}
+
   <main class="wrap entry">
     {title && <h1>{title}</h1>}
     <p class="byline">
@@ -40,7 +56,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
       {dateLabel && <span class="date"> · {dateLabel}</span>}
     </p>
 
-    {media[0] && (
+    {!banner && media[0] && (
       <Media type={media[0].type} src={media[0].src} poster={media[0].poster} caption={media[0].caption} alt={media[0].alt} />
     )}
 
@@ -190,6 +206,17 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE ?? (import.meta.env.DEV ? 'http
 </Base>
 
 <style>
+  /* Full-bleed media banner at the very top of the post. */
+  .post-banner { width: 100%; line-height: 0; }
+  .post-banner img, .post-banner video {
+    display: block; width: 100%; height: clamp(280px, 52vh, 560px); object-fit: cover;
+  }
+  .banner-caption {
+    line-height: 1.5; text-align: center; color: var(--soft); font-style: italic;
+    font-family: -apple-system, system-ui, sans-serif; font-size: .85rem;
+    max-width: var(--maxw); margin: .7rem auto 0; padding: 0 1.25rem;
+  }
+
   .entry { padding-top: 2.5rem; }
   .entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 .4rem; }
   .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; margin: 0 0 2rem; }
