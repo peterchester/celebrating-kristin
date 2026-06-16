@@ -1,5 +1,11 @@
 ---
 import Base from '../layouts/Base.astro';
+
+// Cloudflare Turnstile site key (public, safe to ship). Defaults to Cloudflare's
+// "always passes" TEST key in dev so the check works out of the box; set
+// PUBLIC_TURNSTILE_SITE_KEY to your real key for production. Empty = no check.
+const TURNSTILE_SITE_KEY =
+  import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
 ---
 
 <Base title="Share a memory — Celebrating Kristin">
@@ -49,10 +55,13 @@ import Base from '../layouts/Base.astro';
         <input name="email" type="email" autocomplete="email" placeholder="So we can reach you if needed" />
       </label>
 
+      {TURNSTILE_SITE_KEY && <div class="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark"></div>}
+
       <button type="submit">Share this memory</button>
       <p id="status" role="status" aria-live="polite"></p>
     </form>
   </main>
+  {TURNSTILE_SITE_KEY && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
 </Base>
 
 <script>
@@ -68,6 +77,7 @@ import Base from '../layouts/Base.astro';
   const DEV = import.meta.env.DEV;
   const PRESIGN_API = import.meta.env.PUBLIC_PRESIGN_API ?? (DEV ? 'http://localhost:8787/presign' : '');
   const SUBMIT_API = import.meta.env.PUBLIC_SUBMIT_API ?? (DEV ? 'http://localhost:8787/submit' : '');
+  const TURNSTILE_SITE_KEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? (DEV ? '1x00000000000000000000AA' : '');
 
   const form = document.getElementById('memory-form') as HTMLFormElement;
   const statusEl = document.getElementById('status') as HTMLParagraphElement;
@@ -118,6 +128,15 @@ import Base from '../layouts/Base.astro';
 
     try {
       const fd = new FormData(form);
+
+      // Require the "not a robot" check (if enabled) before uploading anything.
+      const turnstileToken = String(fd.get('cf-turnstile-response') || '');
+      if (TURNSTILE_SITE_KEY && !turnstileToken) {
+        setStatus('Please complete the “I’m not a robot” check.', 'err');
+        btn.disabled = false;
+        return;
+      }
+
       const files = (form.querySelector('input[name="media"]') as HTMLInputElement).files;
 
       const media = [];
@@ -140,6 +159,7 @@ import Base from '../layouts/Base.astro';
         body: String(fd.get('body') || '').trim(),
         media,
         email: String(fd.get('email') || '').trim() || undefined, // private — backend stores separately
+        turnstileToken: turnstileToken || undefined, // verified server-side, never stored
       };
 
       if (!SUBMIT_API) {
@@ -164,6 +184,8 @@ import Base from '../layouts/Base.astro';
       setStatus((err as Error).message || 'Something went wrong. Please try again.', 'err');
     } finally {
       btn.disabled = false;
+      // Turnstile tokens are single-use — reset so the widget is ready to retry.
+      if ((window as any).turnstile) (window as any).turnstile.reset();
     }
   });
 </script>

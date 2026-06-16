@@ -95,6 +95,29 @@ Notes that'll save you time:
 
 Thank you for any time you put into this. 🤍
 
+## Spam protection (Cloudflare Turnstile)
+
+The share form uses [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) —
+a no-typing "verify you're human" widget (usually a quick checkbox, sometimes
+fully automatic). It's free and privacy-friendly (no Google tracking). Two keys,
+from the Turnstile dashboard (free Cloudflare account):
+
+- `PUBLIC_TURNSTILE_SITE_KEY` — public, used by the form (build-time env).
+- `TURNSTILE_SECRET` — private, used by the backend; `/submit` verifies every
+  token with Cloudflare and rejects anything that fails.
+
+In `npm run dev` the form defaults to Cloudflare's **test** site key (always
+passes), so the widget shows with no setup. Backend verification only runs when
+`TURNSTILE_SECRET` is set:
+
+```bash
+RK_ADMIN_TOKEN="…" TURNSTILE_SECRET="1x0000000000000000000000000000000AA" npm run capture
+```
+
+Test secrets: `1x000…AA` always passes, `2x000…AA` always fails. For production,
+set both env vars to your real keys. (Tai's AWS `/submit` does the same
+server-side verification — it's part of the contract.)
+
 ## Freezing it (Phase 1 → Phase 2)
 
 When capture is done:

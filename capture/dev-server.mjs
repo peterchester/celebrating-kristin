@@ -29,6 +29,11 @@ const PORT = 8787;
 //   RK_ADMIN_TOKEN="some-long-secret" npm run capture
 const ADMIN = process.env.RK_ADMIN_TOKEN || '';
 
+// Cloudflare Turnstile secret. When set, /submit verifies the widget token with
+// Cloudflare; when empty, the check is skipped (dev/preview). Test secrets:
+//   1x000…AA always passes, 2x000…AA always fails.
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
+
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,PUT,OPTIONS',
@@ -84,6 +89,22 @@ const saveTokens = async (o) => {
 };
 const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
 
+// Verify a Cloudflare Turnstile token server-side. Skipped if no secret is set.
+const verifyTurnstile = async (token, ip) => {
+  if (!TURNSTILE_SECRET) return true;
+  if (!token) return false;
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: TURNSTILE_SECRET, response: token, ...(ip ? { remoteip: ip } : {}) }),
+    });
+    return (await res.json())?.success === true;
+  } catch {
+    return false;
+  }
+};
+
 // Memory dates may be any date in the past, but never the future (a future date
 // is treated as an error and dropped). Returns YYYY-MM-DD or null.
 const validMemoryDate = (v, now = new Date()) => {
@@ -125,11 +146,13 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/submit') {
       const s = JSON.parse((await readBody(req)).toString() || '{}');
       if (!s?.author?.name || !s?.body) return send(res, 400, { error: 'name and memory are required' });
+      if (!(await verifyTurnstile(s.turnstileToken, req.socket?.remoteAddress)))
+        return send(res, 403, { error: 'verification failed' });
 
       const now = new Date();
       const id = await uniqueEntryId(s.title ? slug(s.title) : slug(s.author.name));
 
-      const { email, memoryDate, ...rest } = s; // email stays private, never in the public entry
+      const { email, memoryDate, turnstileToken, ...rest } = s; // private/transient fields never stored
       const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };
       const md = validMemoryDate(memoryDate, now); // future/invalid dates are dropped
       if (md) entry.memoryDate = md;
