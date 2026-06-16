@@ -72,6 +72,11 @@
 .post-banner img, .post-banner video {
   display: block; width: 100%; height: clamp(280px, 52vh, 560px); object-fit: cover;
 }
+/* On wide screens grow the banner with the viewport width, so it stays a
+   proper banner instead of a short letterbox strip. */
+@media (min-width: 1021px) {
+  .post-banner img, .post-banner video { height: clamp(480px, 42vw, 760px); }
+}
 .banner-caption {
   line-height: 1.5; text-align: center; color: var(--soft); font-style: italic;
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem;
