@@ -13,7 +13,7 @@
 // Uses only Node built-ins — no dependencies to install.
 
 import { createServer } from 'node:http';
-import { mkdir, writeFile, appendFile, readFile, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, appendFile, readFile, unlink, access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
@@ -48,6 +48,19 @@ const readBody = (req) =>
 
 const slug = (s) =>
   (s || 'anon').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').slice(0, 40) || 'anon';
+
+const exists = async (p) => { try { await access(p); return true; } catch { return false; } };
+
+// The entry id IS the URL slug — clean and human, from the title (or author as a
+// fallback when there's no title). Add -2, -3, … only to avoid colliding with an
+// existing entry. No date, no random. Fixed at creation, so editing a title later
+// never changes the URL.
+const uniqueEntryId = async (base) => {
+  base = base || 'memory';
+  let id = base, n = 2;
+  while (await exists(join(ENTRIES, `${id}.json`))) id = `${base}-${n++}`;
+  return id;
+};
 
 // Only allow keys under /media/, no traversal. Returns a safe absolute path.
 const safeMediaPath = (key) => {
@@ -114,7 +127,7 @@ const server = createServer(async (req, res) => {
       if (!s?.author?.name || !s?.body) return send(res, 400, { error: 'name and memory are required' });
 
       const now = new Date();
-      const id = `${now.toISOString().slice(0, 10)}-${slug(s.author.name)}-${Math.random().toString(36).slice(2, 6)}`;
+      const id = await uniqueEntryId(s.title ? slug(s.title) : slug(s.author.name));
 
       const { email, memoryDate, ...rest } = s; // email stays private, never in the public entry
       const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };

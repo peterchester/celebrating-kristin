@@ -8,15 +8,19 @@ of it for free.
 ## One entry
 
 Each story is a single JSON file under `src/content/entries/`, named with a
-sortable, URL-safe id:
+clean, human, URL-safe id:
 
 ```
-src/content/entries/2026-06-14-jane-doe-big-sur.json
+src/content/entries/the-road-trip-to-big-sur.json
 ```
 
 The filename (minus `.json`) becomes the entry's `id` and its page URL
-(`/entry/2026-06-14-jane-doe-big-sur`). Use `YYYY-MM-DD-slug` so files sort
-chronologically and never collide.
+(`/entry/the-road-trip-to-big-sur`). The id is a slug of the **title**, falling
+back to the **author's name** when there's no title, with a numeric suffix
+(`-2`, `-3`, …) added only to avoid colliding with an existing entry. No date,
+no random string. It is **assigned once at creation and never changes** — so
+editing a title later won't break the URL or the contributor's edit access.
+Ordering ("most recent") comes from the `submittedAt` field, not the filename.
 
 ### Schema
 

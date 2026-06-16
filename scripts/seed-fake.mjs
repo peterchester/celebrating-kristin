@@ -7,21 +7,21 @@
 // the browser), and video uses a poster image (the <video> needs a real MP4 to
 // actually play — drop one in for full playback testing).
 
-import { mkdir, writeFile, rm, readdir } from 'node:fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ENTRIES = join(ROOT, 'src', 'content', 'entries');
 const FAKE = join(ROOT, 'public', 'media', 'fake');
-const PREFIX = 'fake-';
+const MANIFEST = join(FAKE, 'seed-entries.json'); // ids we created, so --clean can find them
 
 if (process.argv.includes('--clean')) {
-  for (const f of await readdir(ENTRIES).catch(() => [])) {
-    if (f.startsWith(PREFIX)) await rm(join(ENTRIES, f));
-  }
+  let ids = [];
+  try { ids = JSON.parse(await readFile(MANIFEST, 'utf8')); } catch {}
+  for (const id of ids) await rm(join(ENTRIES, `${id}.json`)).catch(() => {});
   await rm(FAKE, { recursive: true, force: true });
-  console.log('Removed fake entries and media.');
+  console.log(`Removed ${ids.length} fake entries and media.`);
   process.exit(0);
 }
 
@@ -134,15 +134,25 @@ const memories = [
     media: [img(6, 'The fridge, still'), aud(1, 'Her voicemail saying thank you, years later')] },
 ];
 
-const pad = (n) => String(n + 1).padStart(2, '0');
+// Same id/slug rule as the real backend: title (or author) → clean slug, with a
+// numeric suffix only on collision. No date in the filename.
+const slugify = (s) =>
+  (s || '').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_]+/g, '-').slice(0, 40);
 const day = (n) => `2026-06-${String(2 + n).padStart(2, '0')}T1${n % 9}:30:00Z`;
 
+const used = new Set();
+const ids = [];
 for (let i = 0; i < memories.length; i++) {
   const m = memories[i];
-  const slug = m.author.name.toLowerCase().split(' ')[0];
+  const base = (m.title ? slugify(m.title) : slugify(m.author.name)) || 'memory';
+  let id = base, n = 2;
+  while (used.has(id)) id = `${base}-${n++}`;
+  used.add(id);
+  ids.push(id);
   const entry = { ...m, media: m.media ?? [], submittedAt: day(i), status: 'published' };
-  await writeFile(join(ENTRIES, `${PREFIX}${pad(i)}-${slug}.json`), JSON.stringify(entry, null, 2) + '\n');
+  await writeFile(join(ENTRIES, `${id}.json`), JSON.stringify(entry, null, 2) + '\n');
 }
+await writeFile(MANIFEST, JSON.stringify(ids, null, 2) + '\n');
 
 console.log(`Seeded ${memories.length} fake memories + media into src/content/entries/ and public/media/fake/.`);
 console.log('Remove with: node scripts/seed-fake.mjs --clean');
