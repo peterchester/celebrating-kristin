@@ -15,7 +15,7 @@ src/content/entries/the-road-trip-to-big-sur.json
 ```
 
 The filename (minus `.json`) becomes the entry's `id` and its page URL
-(`/entry/the-road-trip-to-big-sur`). The id is a slug of the **title**, falling
+(`/memory/the-road-trip-to-big-sur`). The id is a slug of the **title**, falling
 back to the **author's name** when there's no title, with a numeric suffix
 (`-2`, `-3`, …) added only to avoid colliding with an existing entry. No date,
 no random string. It is **assigned once at creation and never changes** — so
