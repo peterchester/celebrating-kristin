@@ -13,14 +13,19 @@
 // Uses only Node built-ins — no dependencies to install.
 
 import { createServer } from 'node:http';
-import { mkdir, writeFile, appendFile, readFile, unlink, access } from 'node:fs/promises';
+import { mkdir, writeFile, appendFile, readFile, readdir, unlink, access } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = join(ROOT, 'public');
-const ENTRIES = join(ROOT, 'src', 'content', 'entries');
+// The site reads memories at runtime from /data/index.json and /entries/<id>.json,
+// so the mock writes them under public/ (served by the dev server at those paths) —
+// mirroring what the AWS Lambda writes to S3. Both are gitignored local artifacts.
+const ENTRIES = join(PUBLIC, 'entries');
+const DATA_DIR = join(PUBLIC, 'data');
+const INDEX = join(DATA_DIR, 'index.json');
 const PRIVATE = join(ROOT, 'capture', 'private'); // emails, edit tokens — gitignored, never published
 const TOKENS = join(PRIVATE, 'tokens.json'); // { entryId: sha256(editToken) }
 const PORT = 8787;
@@ -122,6 +127,24 @@ const authorize = async (id, token, adminToken) => {
   return !!want && eq(sha(token), want);
 };
 
+// Rebuild public/data/index.json (the list the site reads) from the entry files,
+// mirroring the Lambda. Called after every change and on startup, so hand-added
+// entry files get picked up too.
+const rebuildIndex = async () => {
+  await mkdir(DATA_DIR, { recursive: true });
+  let files = [];
+  try { files = (await readdir(ENTRIES)).filter((f) => f.endsWith('.json')); } catch {}
+  const out = [];
+  for (const f of files) {
+    try {
+      const entry = JSON.parse(await readFile(join(ENTRIES, f), 'utf8'));
+      if (entry.status !== 'hidden') out.push({ id: f.slice(0, -5), ...entry });
+    } catch {}
+  }
+  out.sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+  await writeFile(INDEX, JSON.stringify(out, null, 2) + '\n');
+};
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   if (req.method === 'OPTIONS') return send(res, 204, '');
@@ -172,6 +195,7 @@ const server = createServer(async (req, res) => {
         await appendFile(join(PRIVATE, 'contacts.jsonl'), JSON.stringify({ id, name: s.author.name, email }) + '\n');
       }
 
+      await rebuildIndex();
       console.log(`✓ saved entry ${id}${s.media?.length ? ` (+${s.media.length} media)` : ''}`);
       return send(res, 200, { ok: true, id, editToken });
     }
@@ -193,6 +217,7 @@ const server = createServer(async (req, res) => {
       entry.editedAt = new Date().toISOString();
       await writeFile(file, JSON.stringify(entry, null, 2) + '\n');
 
+      await rebuildIndex();
       console.log(`✎ updated entry ${id}${isAdmin(adminToken) ? ' (admin)' : ''}`);
       return send(res, 200, { ok: true, id });
     }
@@ -214,6 +239,7 @@ const server = createServer(async (req, res) => {
       delete tokens[id];
       await saveTokens(tokens);
 
+      await rebuildIndex();
       console.log(`✗ deleted entry ${id}${isAdmin(adminToken) ? ' (admin)' : ''}`);
       return send(res, 200, { ok: true, id });
     }
@@ -225,7 +251,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
+  await rebuildIndex(); // pick up any hand-added entry files on startup
   console.log(`Capture mock running → http://localhost:${PORT}`);
-  console.log('New submissions appear in src/content/entries/ — the dev site hot-reloads them.');
+  console.log('Submissions are written to public/entries/ + public/data/index.json — the dev site reads them live.');
 });

@@ -29,6 +29,16 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # Keep prior versions so an accidental overwrite/delete (e.g. a bad deploy)
+      # is recoverable; expire old versions after 30 days to bound storage.
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
       # Allow the site to upload media straight to S3 via presigned PUT URLs
       # (the capture backend signs them; the browser PUTs the bytes here).
       CorsConfiguration:

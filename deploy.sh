@@ -78,10 +78,18 @@ fi
 
 # Everything else (HTML, media, json) → no-cache so a redeploy shows up at once.
 # (CloudFront is invalidated below regardless; this controls the browser.)
+#
+# CRITICAL: --delete removes bucket objects not present in dist/. The capture
+# backend writes submitted memories (entries/, data/) and uploaded media
+# (media/u/) straight to S3 — they are NOT part of the build — so they MUST be
+# excluded here, or every deploy would delete everyone's submissions.
 echo "→ Uploading pages + media..."
 aws s3 sync dist "s3://$BUCKET" \
   --delete \
   --exclude "_astro/*" \
+  --exclude "entries/*" \
+  --exclude "data/*" \
+  --exclude "media/u/*" \
   --cache-control "public, max-age=0, must-revalidate"
 
 # ── 3. Invalidate CloudFront ─────────────────────────────────────────────────

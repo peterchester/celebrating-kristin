@@ -25,3 +25,7 @@ src/content/entries/*.json
 !src/content/entries/2026-06-14-example.json
 public/media/*
 !public/media/2026-06-14-example/
+# Local-dev capture output (the mock writes here; mirrors what the Lambda writes
+# to S3). Submitting locally or hand-adding files here is fine — never committed.
+public/entries/
+public/data/
