@@ -10,16 +10,11 @@ capture/.env
 capture/private/
 *.private.json
 
-# Git tracks CODE only — submitted content (entries + uploaded media) lives in
-# the live store / locally, and is assembled into the static build at deploy
-# ("freeze") time. One example of each is kept so the repo builds on a fresh clone.
+# Ignore USER-GENERATED content only — submitted entries and uploaded media live
+# in the live store / locally, and are assembled into the static build at deploy
+# ("freeze") time. One example entry is kept so the repo builds on a fresh clone.
+# Theme/design assets (public/img/*) are committed like any other code.
 src/content/entries/*.json
 !src/content/entries/2026-06-14-example.json
 public/media/*
 !public/media/2026-06-14-example/
-
-# Large video assets (e.g. background loop) — host via CDN/object storage or
-# commit an optimized mp4 deliberately, rather than bloating git with the source.
-public/img/*.mov
-public/img/*.mp4
-public/img/*.webm
