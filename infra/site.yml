@@ -76,6 +76,13 @@ Resources:
         function handler(event) {
           var request = event.request;
           var uri = request.uri;
+          // Single-post viewer: route every /memory/<slug> to one client-rendered
+          // page. CloudFront swaps the origin object; the browser URL keeps the
+          // slug so the page's script can read it and fetch that entry.
+          if (uri.indexOf('/memory/') === 0) {
+            request.uri = '/memory/index.html';
+            return request;
+          }
           var lastSegment = uri.substring(uri.lastIndexOf('/') + 1);
           if (uri.endsWith('/')) {
             request.uri += 'index.html';

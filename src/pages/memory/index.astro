@@ -1,0 +1,239 @@
+---
+import Base from '../../layouts/Base.astro';
+// Single-post viewer. CloudFront routes every /memory/<slug> request to this one
+// page; the script reads the slug from the URL, fetches /entries/<slug>.json, and
+// renders it in the browser — so new memories work with no rebuild. Markup +
+// styles for the body come from src/lib/render.ts + styles/content.css.
+---
+
+<Base>
+  <div id="post-banner"></div>
+
+  <main class="wrap entry">
+    <div id="post-content"></div>
+    <p id="not-found" hidden>That memory couldn’t be found. <a href="/">Back to all memories</a></p>
+
+    {/* Revealed by script only when this device owns the entry or admin mode is on. */}
+    <section id="owner-tools" class="owner-tools" hidden>
+      <div class="ot-bar">
+        <span id="ot-label" class="ot-label"></span>
+        <span class="ot-actions">
+          <button type="button" id="ot-edit">Edit</button>
+          <button type="button" id="ot-delete" class="danger">Delete</button>
+        </span>
+      </div>
+      <form id="ot-form" hidden>
+        <label>Title<input name="title" type="text" /></label>
+        <label>Date of memory (optional)<input name="memoryDate" type="date" /></label>
+        <label>Your name<input name="name" type="text" /></label>
+        <label>How you knew Kristin<input name="relationship" type="text" /></label>
+        <label>Your memory<textarea name="body" rows="10"></textarea></label>
+        <div class="ot-buttons">
+          <button type="submit">Save changes</button>
+          <button type="button" id="ot-cancel" class="ghost">Cancel</button>
+        </div>
+        <p id="ot-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+
+  <nav class="memory-nav" aria-label="Memory navigation" hidden>
+    <a class="nav-btn disabled" id="nav-prev" rel="prev" href="#" aria-label="Previous memory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+    </a>
+    <a class="nav-btn home" href="/" aria-label="All memories — home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.5 12 4l8.5 7.5" /><path d="M5.5 10v9.5h13V10" /></svg>
+    </a>
+    <a class="nav-btn disabled" id="nav-next" rel="next" href="#" aria-label="Next memory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+    </a>
+  </nav>
+</Base>
+
+<script>
+  import { bannerHTML, postContentHTML } from '../../lib/render';
+
+  // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
+  // JSON. API base: explicit PUBLIC_API_BASE, else derived from PUBLIC_SUBMIT_API.
+  const SUBMIT = import.meta.env.PUBLIC_SUBMIT_API || '';
+  const API_BASE =
+    import.meta.env.PUBLIC_API_BASE ||
+    (SUBMIT ? SUBMIT.replace(/\/submit$/, '') : (import.meta.env.DEV ? 'http://localhost:8787' : ''));
+
+  const match = location.pathname.match(/^\/memory\/([^/]+)\/?$/);
+  const id = match ? decodeURIComponent(match[1]) : '';
+
+  const bannerEl = document.getElementById('post-banner');
+  const contentEl = document.getElementById('post-content');
+  const notFound = document.getElementById('not-found');
+  const navEl = document.querySelector('.memory-nav') as HTMLElement | null;
+
+  const cookie = (k: string) => {
+    const m = document.cookie.split('; ').find((c) => c.startsWith(k + '='));
+    return m ? decodeURIComponent(m.slice(k.length + 1)) : null;
+  };
+
+  function showNotFound() {
+    if (notFound) notFound.hidden = false;
+    if (navEl) navEl.hidden = false;
+  }
+
+  async function setupNav(currentId: string) {
+    let prev: string | null = null;
+    let next: string | null = null;
+    try {
+      const r = await fetch('/data/index.json', { cache: 'no-store' });
+      if (r.ok) {
+        const list = await r.json();
+        list.sort((a: any, b: any) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+        const i = list.findIndex((e: any) => e.id === currentId);
+        if (i !== -1) { prev = list[i - 1]?.id ?? null; next = list[i + 1]?.id ?? null; }
+      }
+    } catch {}
+    const prevA = document.getElementById('nav-prev') as HTMLAnchorElement | null;
+    const nextA = document.getElementById('nav-next') as HTMLAnchorElement | null;
+    if (prev && prevA) { prevA.href = '/memory/' + prev; prevA.classList.remove('disabled'); }
+    if (next && nextA) { nextA.href = '/memory/' + next; nextA.classList.remove('disabled'); }
+    if (navEl) navEl.hidden = false;
+
+    document.addEventListener('keydown', (e) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowLeft' && prev) location.href = '/memory/' + prev;
+      if (e.key === 'ArrowRight' && next) location.href = '/memory/' + next;
+    });
+  }
+
+  function setupTools(entry: any) {
+    if (!API_BASE) return; // no backend → file-based admin only
+
+    let ownerToken: string | null = null;
+    try {
+      const list = JSON.parse(cookie('rk_owner') || '[]');
+      ownerToken = (list.find((e: any) => e.id === id) || {}).token || null;
+    } catch {}
+    const adminToken = cookie('rk_admin');
+    if (!ownerToken && !adminToken) return; // not owner, not admin → leave hidden
+
+    const tools = document.getElementById('owner-tools') as HTMLElement;
+    const form = document.getElementById('ot-form') as HTMLFormElement;
+    const statusEl = document.getElementById('ot-status') as HTMLElement;
+    const fld = (n: string) => form.querySelector('[name="' + n + '"]') as HTMLInputElement;
+
+    (document.getElementById('ot-label') as HTMLElement).textContent = ownerToken
+      ? 'This is your memory — you can edit or remove it.'
+      : 'Admin controls.';
+    fld('title').value = entry.title || '';
+    fld('memoryDate').value = entry.memoryDate || '';
+    fld('memoryDate').max = new Date().toISOString().slice(0, 10);
+    fld('name').value = entry.author?.name || '';
+    fld('relationship').value = entry.author?.relationship || '';
+    fld('body').value = entry.body || '';
+    tools.hidden = false;
+
+    const creds = () => (ownerToken ? { token: ownerToken } : { adminToken });
+    const post = (path: string, extra: any) =>
+      fetch(API_BASE + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, ...creds(), ...extra }),
+      });
+
+    document.getElementById('ot-edit')!.addEventListener('click', () => { form.hidden = !form.hidden; });
+    document.getElementById('ot-cancel')!.addEventListener('click', () => { form.hidden = true; });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = 'Saving…';
+      try {
+        const r = await post('/update', {
+          title: fld('title').value,
+          memoryDate: fld('memoryDate').value,
+          name: fld('name').value,
+          relationship: fld('relationship').value,
+          body: fld('body').value,
+        });
+        if (!r.ok) throw new Error('Could not save — your edit access may have expired.');
+        location.reload();
+      } catch (err) { statusEl.textContent = (err as Error).message; }
+    });
+
+    document.getElementById('ot-delete')!.addEventListener('click', async () => {
+      if (!confirm('Permanently delete this memory? This cannot be undone.')) return;
+      try {
+        const r = await post('/delete', {});
+        if (!r.ok) throw new Error('Could not delete — your access may have expired.');
+        try {
+          const list = JSON.parse(cookie('rk_owner') || '[]').filter((e: any) => e.id !== id);
+          const secure = location.protocol === 'https:' ? '; secure' : '';
+          document.cookie = 'rk_owner=' + encodeURIComponent(JSON.stringify(list)) + '; path=/; max-age=' + 90 * 86400 + '; samesite=Lax' + secure;
+        } catch {}
+        location.href = '/';
+      } catch (err) { alert((err as Error).message); }
+    });
+  }
+
+  async function main() {
+    if (!id) return showNotFound();
+    let entry: any;
+    try {
+      const r = await fetch('/entries/' + encodeURIComponent(id) + '.json', { cache: 'no-store' });
+      if (!r.ok) return showNotFound();
+      entry = await r.json();
+    } catch { return showNotFound(); }
+
+    document.title = (entry.title ? entry.title : 'A memory from ' + (entry.author?.name || 'a friend')) + ' — Celebrating Kristin';
+    if (bannerEl) bannerEl.innerHTML = bannerHTML(entry);
+    if (contentEl) contentEl.innerHTML = postContentHTML(entry);
+
+    setupNav(id);
+    setupTools(entry);
+  }
+
+  main();
+</script>
+
+<style>
+  .owner-tools { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px dashed var(--line); font-family: -apple-system, system-ui, sans-serif; }
+  .ot-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+  .ot-label { color: var(--soft); font-size: .9rem; }
+  .ot-actions { display: flex; gap: .5rem; }
+  .owner-tools button {
+    padding: .45rem 1rem; border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06); color: var(--ink); font: inherit; font-size: .9rem; cursor: pointer;
+  }
+  .owner-tools button.danger { color: #ff9a8a; border-color: rgba(255, 120, 100, 0.35); }
+  .owner-tools button.ghost { color: var(--soft); }
+  #ot-form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  #ot-form label { display: grid; gap: .35rem; font-size: .9rem; }
+  #ot-form input, #ot-form textarea { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; background: rgba(255, 255, 255, 0.05); color: var(--ink); }
+  #ot-form textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
+  .ot-buttons { display: flex; gap: .5rem; }
+  .ot-buttons button[type="submit"] { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 600; }
+  #ot-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
+  #not-found { color: var(--soft); }
+
+  /* Floating prev / home / next bar. 46px hit targets, safe-area aware, blurred. */
+  .memory-nav {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    z-index: 30; display: flex; align-items: center; gap: 0.15rem; padding: 0.3rem;
+    background: rgba(14, 18, 38, 0.72);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 1px solid var(--line); border-radius: 999px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 22px var(--glow);
+  }
+  .nav-btn {
+    -webkit-tap-highlight-color: transparent;
+    display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%;
+    color: var(--ink); text-decoration: none; transition: background 0.15s ease, color 0.15s ease;
+  }
+  .nav-btn svg { width: 22px; height: 22px; display: block; }
+  .nav-btn.home svg { width: 23px; height: 23px; }
+  .nav-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--accent); }
+  .nav-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .nav-btn.disabled { color: rgba(154, 166, 201, 0.35); pointer-events: none; }
+
+  :global(footer.site) { margin-bottom: 5rem; }
+</style>

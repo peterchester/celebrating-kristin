@@ -1,11 +1,8 @@
 ---
-import { getCollection } from 'astro:content';
 import Base from '../layouts/Base.astro';
-import MemoryCard from '../components/MemoryCard.astro';
-
-const entries = (await getCollection('entries'))
-  .filter((e) => e.data.status !== 'hidden')
-  .sort((a, b) => b.data.submittedAt.getTime() - a.data.submittedAt.getTime());
+// The gallery is rendered in the browser from /data/index.json (written by the
+// capture backend), so a new memory appears the moment it's submitted — no
+// rebuild. Card markup + styles come from src/lib/render.ts + styles/content.css.
 ---
 
 <Base>
@@ -18,13 +15,33 @@ const entries = (await getCollection('entries'))
   </header>
 
   <main class="wrap">
-    {entries.length === 0 && <p class="empty">No memories yet. <a href="/share">Be the first to share one.</a></p>}
-
-    <div class="masonry">
-      {entries.map((e) => <MemoryCard entry={e} />)}
-    </div>
+    <p class="empty" hidden>No memories yet. <a href="/share">Be the first to share one.</a></p>
+    <div class="masonry" aria-live="polite"></div>
   </main>
 </Base>
+
+<script>
+  import { cardHTML } from '../lib/render';
+
+  const masonry = document.querySelector('.masonry');
+  const empty = document.querySelector('.empty');
+
+  async function load() {
+    try {
+      const res = await fetch('/data/index.json', { cache: 'no-store' });
+      const entries = res.ok ? await res.json() : [];
+      entries.sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+      if (!entries.length) {
+        if (empty) (empty as HTMLElement).hidden = false;
+        return;
+      }
+      if (masonry) masonry.innerHTML = entries.map(cardHTML).join('');
+    } catch {
+      if (empty) (empty as HTMLElement).hidden = false;
+    }
+  }
+  load();
+</script>
 
 <style>
   /* Photo hero — Kristin sits on the left of the image, so the text floats over
@@ -38,9 +55,6 @@ const entries = (await getCollection('entries'))
     border-bottom: none;
     overflow: hidden;
   }
-  /* The photo is its own layer, faded to real TRANSPARENCY via a mask — so the
-     background video shows through where it fades, instead of a solid gradient
-     sitting on top of it. */
   .site.hero::before {
     content: '';
     position: absolute;
@@ -84,41 +98,24 @@ const entries = (await getCollection('entries'))
   }
   .hero-text .share-cta { box-shadow: 0 4px 18px rgba(0,0,0,.25); }
 
-  /* On narrow screens the image crops to a portrait; keep Kristin in frame and
-     move the text to the bottom over a vertical scrim so it always reads. */
   @media (max-width: 640px) {
-    .site.hero {
-      min-height: 72vh;
-      align-items: flex-end;
-    }
+    .site.hero { min-height: 72vh; align-items: flex-end; }
     .site.hero::before {
       background-position: 32% center;
       -webkit-mask-image: linear-gradient(to bottom, #000 28%, rgba(0, 0, 0, 0.55) 68%, rgba(0, 0, 0, 0) 100%);
               mask-image: linear-gradient(to bottom, #000 28%, rgba(0, 0, 0, 0.55) 68%, rgba(0, 0, 0, 0) 100%);
     }
-    .hero-text {
-      margin: 0;
-      max-width: none;
-      width: 100%;
-      text-align: center;
-      padding-bottom: 2.5rem;
-    }
+    .hero-text { margin: 0; max-width: none; width: 100%; text-align: center; padding-bottom: 2.5rem; }
   }
 
-  /* Up to 1020px: capped width, cards reflow 1→2→3 columns (the look we like). */
   main { padding-top: 2.5rem; max-width: 1020px; }
   .empty { text-align: center; color: var(--soft); }
 
-  /* Masonry via CSS columns — no JS, handles wildly varying card heights, and
-     cards never split across columns (break-inside: avoid, set on the card). */
-  .masonry {
-    column-width: 19rem;
-    column-gap: 1.25rem;
-  }
+  /* Masonry via CSS columns — no JS, handles varying card heights, and cards
+     never split across columns (break-inside: avoid lives on .card). */
+  .masonry { column-width: 19rem; column-gap: 1.25rem; }
   .masonry > :global(.card) { margin: 0 0 1.25rem; }
 
-  /* Above 1020px: stretch full-width and force a 4th column. Cards widen to
-     fill the screen instead of the layout staying capped and centered. */
   @media (min-width: 1021px) {
     main { max-width: none; }
     .masonry { column-width: auto; column-count: 4; }

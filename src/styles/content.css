@@ -1,0 +1,84 @@
+/* Styles for content that is rendered in the browser at runtime (gallery cards,
+   media, and the single-post body). These used to live as scoped styles inside
+   MemoryCard.astro / Media.astro / memory/[id].astro; they're global now so the
+   markup produced by src/lib/render.ts picks them up. Namespaced under .card /
+   .media / .entry / .post-banner so nothing collides. */
+
+/* ── Gallery card ─────────────────────────────────────────────────────────── */
+.card {
+  display: block;
+  break-inside: avoid;
+  text-decoration: none;
+  color: #2a2740;
+  background: linear-gradient(160deg, #eee9fb, #eaf0fb);
+  border: none;
+  border-radius: 5px;
+  overflow: hidden;
+  transition: box-shadow 0.18s ease;
+}
+.card:hover { box-shadow: 0 6px 34px var(--glow); position: relative; z-index: 1; }
+.card .cover { position: relative; line-height: 0; background: transparent; }
+.card .cover img { width: 100%; height: auto; display: block; }
+.card .play {
+  position: absolute; inset: 0; margin: auto;
+  width: 54px; height: 54px; display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.45); border-radius: 50%; backdrop-filter: blur(2px);
+}
+.card .play svg { width: 26px; height: 26px; fill: #fff; margin-left: 2px; }
+.card .audio-cover {
+  height: 132px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 0.75rem;
+  background: linear-gradient(135deg, #14223f, #103a44);
+}
+.card .wave { width: 60%; height: 40px; }
+.card .wave rect { fill: var(--accent); opacity: 0.8; }
+.card .audio-cover .badge {
+  font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
+  color: var(--accent); letter-spacing: 0.04em; line-height: 1;
+}
+.card .body { padding: 1.2rem 1.4rem 1.4rem; }
+.card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 1.45rem; line-height: 1.25; }
+.card .byline {
+  margin: 0 0 0.7rem; color: #6b6880;
+  font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem;
+}
+.card .excerpt { margin: 0; }
+.card.kind-text { background: linear-gradient(160deg, #eee9fb, #eaf0fb); }
+.card.kind-text .body { padding: 1.6rem 1.5rem; position: relative; }
+.card.kind-text .body::before {
+  content: '\201C'; position: absolute; top: 0.1rem; left: 1.1rem;
+  font-size: 3.4rem; line-height: 1; color: #8a6cd0; opacity: 0.5;
+}
+.card.kind-text h2, .card.kind-text .excerpt { position: relative; }
+.card.kind-text .excerpt { font-size: 1.12rem; line-height: 1.65; }
+.card.kind-text h2 { margin-top: 0.6rem; }
+.card .chips {
+  margin: 0.9rem 0 0; display: flex; flex-wrap: wrap; gap: 0.4rem;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+.card .chip {
+  font-size: 0.72rem; color: #6b6880; letter-spacing: 0.03em;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 999px; padding: 0.18rem 0.6rem;
+}
+
+/* ── Media attachment ─────────────────────────────────────────────────────── */
+.media { margin: 1.5rem 0; }
+.media img, .media video { width: 100%; height: auto; border-radius: 6px; display: block; }
+.media audio { width: 100%; }
+.media figcaption { color: var(--soft); font-size: 0.9rem; font-style: italic; margin-top: 0.5rem; text-align: center; }
+
+/* ── Single-post body ─────────────────────────────────────────────────────── */
+.post-banner { width: 100%; line-height: 0; }
+.post-banner img, .post-banner video {
+  display: block; width: 100%; height: clamp(280px, 52vh, 560px); object-fit: cover;
+}
+.banner-caption {
+  line-height: 1.5; text-align: center; color: var(--soft); font-style: italic;
+  font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem;
+  max-width: var(--maxw); margin: 0.7rem auto 0; padding: 0 1.25rem;
+}
+.entry { padding-top: 2.5rem; }
+.entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 0.4rem; }
+.entry .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: 0.95rem; margin: 0 0 2rem; }
+.entry .byline strong { color: var(--ink); font-weight: 600; }
+.entry article p { margin: 0 0 1.3rem; }
