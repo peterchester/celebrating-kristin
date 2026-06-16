@@ -1,0 +1,248 @@
+// AWS Lambda capture backend for Celebrating Kristin.
+//
+// This is the production sibling of capture/dev-server.mjs — same contract,
+// same logic, but it stores everything in S3 instead of the local filesystem.
+// It runs behind a Lambda Function URL. Routes (all POST):
+//
+//   /presign  -> { url, key }   presigned S3 PUT URL for one media file
+//   /submit   -> writes entries/<id>.json (+ media already uploaded) and issues
+//                a per-entry edit token
+//   /update   -> edit an entry (owner token or admin)
+//   /delete   -> delete an entry and its uploaded media
+//
+// The browser uploads media bytes DIRECTLY to S3 via the presigned URL, so big
+// videos never pass through the function. Public memory JSON + media live in the
+// site bucket (served by CloudFront). Edit-token hashes and contact emails live
+// in a separate PRIVATE bucket the function alone can read.
+//
+// Uses only the AWS SDK v3 that ships with the Lambda Node runtime — no deps.
+
+import {
+  S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand,
+  DeleteObjectCommand, ListObjectsV2Command,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+
+const s3 = new S3Client({});
+const SITE = process.env.SITE_BUCKET;          // public bucket (entries + media)
+const PRIV = process.env.PRIVATE_BUCKET;       // private bucket (tokens + emails)
+const ADMIN = process.env.ADMIN_TOKEN || '';   // optional admin override
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''; // optional captcha
+
+const ENTRIES = 'entries/';        // entries/<id>.json  (public)
+const INDEX = 'data/index.json';   // the list the site reads (public, derived)
+const TOKENS = 'tokens.json';      // { id: sha256(editToken) }  (private)
+const CONTACTS = 'contacts.jsonl'; // one {id,name,email} per line (private)
+const NO_CACHE = 'public, max-age=0, must-revalidate'; // so new data shows at once
+
+const json = (code, body) => ({
+  statusCode: code,
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+const slug = (s) =>
+  (s || 'anon').toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim()
+    .replace(/[\s_]+/g, '-').slice(0, 40) || 'anon';
+const sha = (t) => createHash('sha256').update(String(t)).digest('hex');
+const eq = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
+const safeId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
+
+// ── S3 helpers ───────────────────────────────────────────────────────────────
+async function getJson(bucket, key, fallback) {
+  try {
+    const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return JSON.parse(await r.Body.transformToString());
+  } catch (e) {
+    if (e?.name === 'NoSuchKey' || e?.$metadata?.httpStatusCode === 404) return fallback;
+    throw e;
+  }
+}
+async function getText(bucket, key, fallback) {
+  try {
+    const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    return await r.Body.transformToString();
+  } catch (e) {
+    if (e?.name === 'NoSuchKey' || e?.$metadata?.httpStatusCode === 404) return fallback;
+    throw e;
+  }
+}
+const putJson = (bucket, key, obj) =>
+  s3.send(new PutObjectCommand({
+    Bucket: bucket, Key: key, Body: JSON.stringify(obj, null, 2) + '\n',
+    ContentType: 'application/json', CacheControl: NO_CACHE,
+  }));
+const putText = (bucket, key, text) =>
+  s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: text, ContentType: 'text/plain' }));
+async function exists(bucket, key) {
+  try { await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key })); return true; }
+  catch { return false; }
+}
+
+// The entry id IS the URL slug — title (or author fallback), with -2/-3 only to
+// avoid colliding with an existing entry. Assigned once, never changes.
+const uniqueEntryId = async (base) => {
+  base = base || 'memory';
+  let id = base, n = 2;
+  while (await exists(SITE, `${ENTRIES}${id}.json`)) id = `${base}-${n++}`;
+  return id;
+};
+
+const loadTokens = () => getJson(PRIV, TOKENS, {});
+const saveTokens = (o) => putJson(PRIV, TOKENS, o);
+
+const authorize = async (id, token, adminToken) => {
+  if (isAdmin(adminToken)) return true;
+  if (!token) return false;
+  const want = (await loadTokens())[id];
+  return !!want && eq(sha(token), want);
+};
+
+// Verify a Cloudflare Turnstile token. Skipped when no secret is configured.
+const verifyTurnstile = async (token, ip) => {
+  if (!TURNSTILE_SECRET) return true;
+  if (!token) return false;
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: TURNSTILE_SECRET, response: token, ...(ip ? { remoteip: ip } : {}) }),
+    });
+    return (await res.json())?.success === true;
+  } catch { return false; }
+};
+
+// Memory dates: any past date, never the future. Returns YYYY-MM-DD or null.
+const validMemoryDate = (v, now = new Date()) => {
+  if (typeof v !== 'string' || !v) return null;
+  const d = new Date(v);
+  if (isNaN(d.getTime()) || d.getTime() > now.getTime()) return null;
+  return v.slice(0, 10);
+};
+
+// data/index.json is a derived cache the site reads to render the gallery. We
+// rebuild it from the canonical entries/ objects after every change, so it can
+// never drift out of sync. Hidden entries are excluded; newest first.
+async function rebuildIndex() {
+  const out = [];
+  let token;
+  do {
+    const list = await s3.send(new ListObjectsV2Command({ Bucket: SITE, Prefix: ENTRIES, ContinuationToken: token }));
+    for (const o of list.Contents || []) {
+      if (!o.Key.endsWith('.json')) continue;
+      const id = o.Key.slice(ENTRIES.length, -'.json'.length);
+      const entry = await getJson(SITE, o.Key, null);
+      if (entry && entry.status !== 'hidden') out.push({ id, ...entry });
+    }
+    token = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (token);
+  out.sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
+  await putJson(SITE, INDEX, out);
+}
+
+// media[].src is a public path like "/media/u/xxx"; the S3 key drops the slash.
+const mediaKey = (src) =>
+  typeof src === 'string' && src.startsWith('/media/') && !src.includes('..') ? src.slice(1) : null;
+
+// ── Handler ──────────────────────────────────────────────────────────────────
+export const handler = async (event) => {
+  const method = event?.requestContext?.http?.method || 'GET';
+  const path = event?.rawPath || '/';
+  const ip = event?.requestContext?.http?.sourceIp;
+
+  let s = {};
+  if (event?.body) {
+    const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+    try { s = JSON.parse(raw || '{}'); } catch { s = {}; }
+  }
+
+  try {
+    if (method === 'POST' && path === '/presign') {
+      const { filename, contentType } = s;
+      const rand = randomBytes(3).toString('hex');
+      const base = slug(String(filename || '').replace(/\.[^.]+$/, ''));
+      const ext = (String(filename || '').match(/\.[^.]+$/) || [''])[0];
+      const key = `media/u/${rand}-${base}${ext}`;
+      // Sign only Content-Type (the browser sends it on PUT); CloudFront caches.
+      const url = await getSignedUrl(
+        s3,
+        new PutObjectCommand({ Bucket: SITE, Key: key, ContentType: contentType || 'application/octet-stream' }),
+        { expiresIn: 300 },
+      );
+      return json(200, { url, key: `/${key}` });
+    }
+
+    if (method === 'POST' && path === '/submit') {
+      if (!s?.author?.name || !s?.body) return json(400, { error: 'name and memory are required' });
+      if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'verification failed' });
+
+      const now = new Date();
+      const id = await uniqueEntryId(s.title ? slug(s.title) : slug(s.author.name));
+      const { email, memoryDate, turnstileToken, ...rest } = s; // private/transient, never stored
+      const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };
+      const md = validMemoryDate(memoryDate, now);
+      if (md) entry.memoryDate = md;
+
+      await putJson(SITE, `${ENTRIES}${id}.json`, entry);
+
+      const editToken = randomBytes(16).toString('hex');
+      const tokens = await loadTokens();
+      tokens[id] = sha(editToken);
+      await saveTokens(tokens);
+
+      if (email) {
+        const prev = await getText(PRIV, CONTACTS, '');
+        await putText(PRIV, CONTACTS, prev + JSON.stringify({ id, name: s.author.name, email }) + '\n');
+      }
+
+      await rebuildIndex();
+      return json(200, { ok: true, id, editToken });
+    }
+
+    if (method === 'POST' && path === '/update') {
+      const { id, token, adminToken, name, relationship, title, body, memoryDate } = s;
+      if (!safeId(id)) return json(400, { error: 'bad id' });
+      if (!(await authorize(id, token, adminToken))) return json(403, { error: 'not allowed' });
+
+      const entry = await getJson(SITE, `${ENTRIES}${id}.json`, null);
+      if (!entry) return json(404, { error: 'no such entry' });
+      if (typeof body === 'string' && body.trim()) entry.body = body.trim();
+      if (typeof name === 'string' && name.trim()) entry.author.name = name.trim();
+      if (typeof title === 'string') entry.title = title.trim() || undefined;
+      if (typeof relationship === 'string') entry.author.relationship = relationship.trim() || undefined;
+      if (memoryDate === '') delete entry.memoryDate;
+      else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
+      entry.editedAt = new Date().toISOString();
+
+      await putJson(SITE, `${ENTRIES}${id}.json`, entry);
+      await rebuildIndex();
+      return json(200, { ok: true, id });
+    }
+
+    if (method === 'POST' && path === '/delete') {
+      const { id, token, adminToken } = s;
+      if (!safeId(id)) return json(400, { error: 'bad id' });
+      if (!(await authorize(id, token, adminToken))) return json(403, { error: 'not allowed' });
+
+      const entry = await getJson(SITE, `${ENTRIES}${id}.json`, null);
+      await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: `${ENTRIES}${id}.json` })).catch(() => {});
+      for (const m of entry?.media ?? []) {
+        const k = mediaKey(m.src);
+        if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+      }
+      const tokens = await loadTokens();
+      delete tokens[id];
+      await saveTokens(tokens);
+
+      await rebuildIndex();
+      return json(200, { ok: true, id });
+    }
+
+    return json(404, { error: 'not found' });
+  } catch (e) {
+    console.error(e);
+    return json(500, { error: String(e?.message || e) });
+  }
+};

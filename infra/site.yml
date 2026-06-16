@@ -29,6 +29,15 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      # Allow the site to upload media straight to S3 via presigned PUT URLs
+      # (the capture backend signs them; the browser PUTs the bytes here).
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [PUT, GET, HEAD]
+            AllowedOrigins:
+              - !Sub 'https://${SiteDomain}'
+            AllowedHeaders: ['*']
+            MaxAge: 3000
 
   # Lets ONLY this CloudFront distribution read the private bucket.
   OriginAccessControl:

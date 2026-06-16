@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Capture backend for Celebrating Kristin. A single Lambda (behind a Function
+  URL) that accepts memory submissions, stores public entries + media in the
+  existing site bucket, and keeps edit-token hashes + contact emails in a
+  separate private bucket. Deploy in the same region as the site (us-east-1).
+
+Parameters:
+  SiteBucketName:
+    Type: String
+    Description: Existing public site bucket (entries + media). Same as BUCKET in .deploy.env.
+  AllowOrigin:
+    Type: String
+    Description: The site origin allowed to call the function, e.g. https://celebrate.kristinallen.com
+  AdminToken:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional admin override token (edit/delete any entry). Blank disables it.
+  TurnstileSecret:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional Cloudflare Turnstile secret. Blank skips captcha verification.
+
+Resources:
+
+  # Private store the function alone can read: edit-token hashes + contact emails.
+  PrivateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  CaptureFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: celebrate-kristin-capture
+      Runtime: nodejs20.x
+      Handler: lambda.handler
+      CodeUri: capture/
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          SITE_BUCKET: !Ref SiteBucketName
+          PRIVATE_BUCKET: !Ref PrivateBucket
+          ADMIN_TOKEN: !Ref AdminToken
+          TURNSTILE_SECRET: !Ref TurnstileSecret
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - !Ref AllowOrigin
+          AllowMethods:
+            - POST
+          AllowHeaders:
+            - content-type
+          MaxAge: 3000
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref SiteBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref PrivateBucket
+
+Outputs:
+  FunctionUrl:
+    Description: Base URL of the capture function (append /presign, /submit, etc.)
+    Value: !GetAtt CaptureFnUrl.FunctionUrl
+  PrivateBucket:
+    Description: Private bucket holding token hashes + contact emails
+    Value: !Ref PrivateBucket
