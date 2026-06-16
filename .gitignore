@@ -10,6 +10,9 @@ capture/.env
 capture/private/
 *.private.json
 
+# Per-deployment config for deploy.sh (bucket + distribution id)
+.deploy.env
+
 # Ignore USER-GENERATED content only — submitted entries and uploaded media live
 # in the live store / locally, and are assembled into the static build at deploy
 # ("freeze") time. One example entry is kept so the repo builds on a fresh clone.

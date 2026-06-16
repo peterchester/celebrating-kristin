@@ -1,0 +1,164 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Static hosting for Celebrating Kristin. A private S3 bucket served over HTTPS
+  through CloudFront (locked down with Origin Access Control), an ACM
+  certificate validated automatically via DNS, and Route 53 alias records for
+  the custom subdomain. Deploy this stack in us-east-1 (CloudFront requires its
+  certificate there).
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Globally-unique S3 bucket name that will hold the built site.
+  SiteDomain:
+    Type: String
+    Description: The full subdomain to serve, e.g. celebrate.kristinallen.com
+  HostedZoneId:
+    Type: String
+    Description: Route 53 hosted zone id for the root domain (e.g. kristinallen.com).
+
+Resources:
+
+  # Private bucket — no public access. CloudFront reads it via OAC (below).
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Lets ONLY this CloudFront distribution read the private bucket.
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${BucketName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # TLS certificate. DomainValidationOptions with a HostedZoneId tells
+  # CloudFormation to create the DNS validation records itself and wait until
+  # the cert is issued — no manual step.
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref SiteDomain
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref SiteDomain
+          HostedZoneId: !Ref HostedZoneId
+
+  # Astro builds pages as /memory/<slug>/index.html. CloudFront + S3 won't serve
+  # a "directory" request on its own, so this viewer-request function rewrites
+  # "/foo/" -> "/foo/index.html" and extension-less paths -> "/path/index.html".
+  UrlRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub '${AWS::StackName}-url-rewrite'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Map directory-style URLs to their index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          var lastSegment = uri.substring(uri.lastIndexOf('/') + 1);
+          if (uri.endsWith('/')) {
+            request.uri += 'index.html';
+          } else if (lastSegment.indexOf('.') === -1) {
+            request.uri += '/index.html';
+          }
+          return request;
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'Celebrating Kristin - ${SiteDomain}'
+        Aliases:
+          - !Ref SiteDomain
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100   # North America + Europe edges (cheapest)
+        Origins:
+          - Id: s3-origin
+            DomainName: !GetAtt Bucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          # AWS-managed "CachingOptimized" policy.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt UrlRewriteFunction.FunctionMetadata.FunctionARN
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+
+  # Grant the distribution (and nothing else) read access to the bucket.
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${Bucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+
+  # celebrate.kristinallen.com -> CloudFront (IPv4 + IPv6). Z2FDTNDATAQYW2 is the
+  # fixed hosted-zone id every CloudFront distribution lives under.
+  DnsRecordA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref SiteDomain
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+
+  DnsRecordAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref SiteDomain
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt Distribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+
+Outputs:
+  BucketName:
+    Description: S3 bucket holding the site
+    Value: !Ref Bucket
+  DistributionId:
+    Description: CloudFront distribution id (used by deploy.sh for cache invalidation)
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Description: CloudFront domain (the alias target)
+    Value: !GetAtt Distribution.DomainName
+  SiteURL:
+    Description: Final site URL
+    Value: !Sub 'https://${SiteDomain}'
