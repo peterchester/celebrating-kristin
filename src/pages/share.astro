@@ -175,20 +175,22 @@ import Base from '../layouts/Base.astro';
   .lede { color: var(--soft); margin: 0 0 2rem; }
   form { display: grid; gap: 1.4rem; font-family: -apple-system, system-ui, sans-serif; }
   label { display: grid; gap: .4rem; font-size: .95rem; }
-  .req { color: #b4451f; }
+  .req { color: #ff9a8a; }
   input, textarea {
     font: inherit; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 8px;
-    background: #fff; color: var(--ink); width: 100%;
+    background: rgba(255, 255, 255, 0.05); color: var(--ink); width: 100%;
   }
+  input::placeholder, textarea::placeholder { color: rgba(154, 166, 201, 0.6); }
   textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
   input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
   small { color: var(--soft); }
   button {
     justify-self: start; padding: .8rem 1.6rem; border: none; border-radius: 999px;
-    background: var(--accent); color: #fff; font: inherit; font-size: 1rem; cursor: pointer;
+    background: linear-gradient(120deg, #7ee8c9, #8fd0f0); color: #08111f; font: inherit;
+    font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: 0 0 22px rgba(120, 230, 200, 0.3);
   }
   button:disabled { opacity: .6; cursor: default; }
   #status { margin: 0; min-height: 1.2em; }
-  #status.ok { color: #3c6b4a; }
-  #status.err { color: #b4451f; }
+  #status.ok { color: var(--accent); }
+  #status.err { color: #ff9a8a; }
 </style>

@@ -36,14 +36,32 @@ const entries = (await getCollection('entries'))
     align-items: center;
     padding: 0;
     border-bottom: none;
-    background-image:
-      linear-gradient(105deg, rgba(28,24,20,0) 38%, rgba(28,24,20,0.42) 70%, rgba(28,24,20,0.62) 100%),
-      url('/img/header.jpg');
+    overflow: hidden;
+  }
+  /* The photo is its own layer, faded to real TRANSPARENCY via a mask — so the
+     background video shows through where it fades, instead of a solid gradient
+     sitting on top of it. */
+  .site.hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image: url('/img/header.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
+    -webkit-mask-image:
+      linear-gradient(115deg, #000 24%, rgba(0, 0, 0, 0.82) 52%, rgba(0, 0, 0, 0.4) 80%, rgba(0, 0, 0, 0) 100%),
+      linear-gradient(to bottom, #000 66%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0) 100%);
+    -webkit-mask-composite: source-in;
+    mask-image:
+      linear-gradient(115deg, #000 24%, rgba(0, 0, 0, 0.82) 52%, rgba(0, 0, 0, 0.4) 80%, rgba(0, 0, 0, 0) 100%),
+      linear-gradient(to bottom, #000 66%, rgba(0, 0, 0, 0.4) 90%, rgba(0, 0, 0, 0) 100%);
+    mask-composite: intersect;
   }
   .hero-text {
+    position: relative;
+    z-index: 1;
     margin-left: auto;
     max-width: 30rem;
     padding: 2rem clamp(1.25rem, 5vw, 4rem);
@@ -72,10 +90,11 @@ const entries = (await getCollection('entries'))
     .site.hero {
       min-height: 72vh;
       align-items: flex-end;
+    }
+    .site.hero::before {
       background-position: 32% center;
-      background-image:
-        linear-gradient(to bottom, rgba(28,24,20,0) 30%, rgba(28,24,20,0.35) 60%, rgba(28,24,20,0.72) 100%),
-        url('/img/header.jpg');
+      -webkit-mask-image: linear-gradient(to bottom, #000 28%, rgba(0, 0, 0, 0.55) 68%, rgba(0, 0, 0, 0) 100%);
+              mask-image: linear-gradient(to bottom, #000 28%, rgba(0, 0, 0, 0.55) 68%, rgba(0, 0, 0, 0) 100%);
     }
     .hero-text {
       margin: 0;

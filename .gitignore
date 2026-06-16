@@ -17,3 +17,9 @@ src/content/entries/*.json
 !src/content/entries/2026-06-14-example.json
 public/media/*
 !public/media/2026-06-14-example/
+
+# Large video assets (e.g. background loop) — host via CDN/object storage or
+# commit an optimized mp4 deliberately, rather than bloating git with the source.
+public/img/*.mov
+public/img/*.mp4
+public/img/*.webm
