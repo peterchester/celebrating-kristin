@@ -105,6 +105,29 @@ const TURNSTILE_SITE_KEY =
     document.cookie = `rk_owner=${encodeURIComponent(JSON.stringify(list))}; path=/; max-age=${90 * 86400}; samesite=Lax${secure}`;
   }
 
+  // Remember the contributor's identity (name / how they knew Kristin / email)
+  // so repeat submissions come pre-filled. Stored only in their own browser,
+  // never shared; lasts ~a year or until cookies are cleared.
+  function saveProfile(p: { name?: string; relationship?: string; email?: string }) {
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = `rk_profile=${encodeURIComponent(JSON.stringify(p))}; path=/; max-age=${365 * 86400}; samesite=Lax${secure}`;
+  }
+  function loadProfile() {
+    try {
+      const c = document.cookie.split('; ').find((x) => x.startsWith('rk_profile='));
+      if (!c) return;
+      const p = JSON.parse(decodeURIComponent(c.slice('rk_profile='.length)));
+      const fill = (n: string, val?: string) => {
+        const el = form.querySelector(`[name="${n}"]`) as HTMLInputElement | null;
+        if (el && val) el.value = val;
+      };
+      fill('name', p.name);
+      fill('relationship', p.relationship);
+      fill('email', p.email);
+    } catch {}
+  }
+  loadProfile();
+
   async function uploadFile(file: File) {
     // Ask the backend for a presigned URL, then PUT the bytes straight to storage.
     const res = await fetch(PRESIGN_API, {
@@ -178,7 +201,11 @@ const TURNSTILE_SITE_KEY =
       const { id, editToken } = await res.json();
       if (id && editToken) rememberOwner(id, editToken);
 
+      // Remember identity for next time, then re-fill it after the reset clears
+      // the memory-specific fields.
+      saveProfile({ name: submission.author.name, relationship: submission.author.relationship || '', email: submission.email || '' });
       form.reset();
+      loadProfile();
       setStatus('Thank you. Your memory has been shared. 🤍 You can edit or remove it from its page on this device.', 'ok');
     } catch (err) {
       setStatus((err as Error).message || 'Something went wrong. Please try again.', 'err');
