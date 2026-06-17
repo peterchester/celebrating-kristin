@@ -91,6 +91,7 @@ aws s3 sync dist "s3://$BUCKET" \
   --exclude "comments/*" \
   --exclude "data/*" \
   --exclude "media/u/*" \
+  --exclude "media/originals/*" \
   --cache-control "public, max-age=0, must-revalidate"
 
 # ── 3. Invalidate CloudFront ─────────────────────────────────────────────────

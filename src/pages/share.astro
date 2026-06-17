@@ -66,6 +66,7 @@ const TURNSTILE_SITE_KEY =
 </Base>
 
 <script>
+  import { uploadOne } from '../lib/upload';
   // ── Capture backend ────────────────────────────────────────────────────────
   // Point these at your serverless endpoints when Phase 1 is wired up.
   //   PRESIGN_API → returns { url, key } for a direct-to-S3 upload
@@ -143,20 +144,6 @@ const TURNSTILE_SITE_KEY =
     });
   });
 
-  async function uploadFile(file: File) {
-    // Ask the backend for a presigned URL, then PUT the bytes straight to storage.
-    const res = await fetch(PRESIGN_API, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
-    });
-    if (!res.ok) throw new Error('Could not get upload URL');
-    const { url, key } = await res.json();
-    const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-    if (!put.ok) throw new Error(`Upload failed for ${file.name}`);
-    const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'video';
-    return { type: kind, src: key, caption: '' };
-  }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -189,7 +176,7 @@ const TURNSTILE_SITE_KEY =
       if (files && files.length && PRESIGN_API) {
         for (const file of Array.from(files)) {
           setStatus(`Uploading ${file.name}…`);
-          media.push(await uploadFile(file));
+          media.push(await uploadOne(file, PRESIGN_API));
         }
       }
 

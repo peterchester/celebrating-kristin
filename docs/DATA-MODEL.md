@@ -68,6 +68,11 @@ must stay in sync** — Zod is the law, this is the explanation.
 - **`media[].src`** — a path under `public/`, i.e. `/media/<entry-id>/<file>`.
   During capture these may temporarily be S3 keys; the *freeze* step downloads
   them into `public/media/` and rewrites the paths to local ones.
+- **`media[].original`** — optional path to the *untouched* uploaded file. For
+  images the form generates a web-optimized JPEG (max 2400px, EXIF stripped,
+  ~85% quality) at `src` and saves the unmodified upload at `original`. The
+  site displays `src`; `original` exists for archival and "download original"
+  links. Stored under `/media/originals/` instead of `/media/u/`.
 - **`status: "hidden"`** — lets an admin pull a story from the public site
   without destroying the submission. The archive build skips hidden entries.
 

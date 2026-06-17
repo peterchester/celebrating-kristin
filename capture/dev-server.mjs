@@ -152,9 +152,10 @@ const server = createServer(async (req, res) => {
 
   try {
     if (req.method === 'POST' && url.pathname === '/presign') {
-      const { filename, contentType } = JSON.parse((await readBody(req)).toString() || '{}');
+      const { filename, contentType, kind } = JSON.parse((await readBody(req)).toString() || '{}');
       const rand = Math.random().toString(36).slice(2, 8);
-      const key = `/media/u/${rand}-${slug(filename?.replace(/\.[^.]+$/, ''))}${(filename?.match(/\.[^.]+$/) || [''])[0]}`;
+      const prefix = kind === 'original' ? '/media/originals/' : '/media/u/';
+      const key = `${prefix}${rand}-${slug(filename?.replace(/\.[^.]+$/, ''))}${(filename?.match(/\.[^.]+$/) || [''])[0]}`;
       // In AWS this would be a presigned S3 PUT URL; locally it's our own /upload.
       return send(res, 200, { url: `http://localhost:${PORT}/upload?key=${encodeURIComponent(key)}`, key, contentType });
     }
@@ -235,8 +236,10 @@ const server = createServer(async (req, res) => {
       try { entry = JSON.parse(await readFile(file, 'utf8')); } catch {}
       await unlink(file).catch(() => {});
       for (const m of entry?.media ?? []) { // remove this entry's uploaded media too
-        const mp = safeMediaPath(m.src);
-        if (mp) await unlink(mp).catch(() => {});
+        for (const src of [m.src, m.original]) {
+          const mp = safeMediaPath(src);
+          if (mp) await unlink(mp).catch(() => {});
+        }
       }
       const tokens = await loadTokens();
       delete tokens[id];
@@ -293,7 +296,9 @@ const server = createServer(async (req, res) => {
       try { list = JSON.parse(await readFile(file, 'utf8')); } catch {}
       const gone = list.find((c) => c.id === commentId);
       await writeFile(file, JSON.stringify(list.filter((c) => c.id !== commentId), null, 2) + '\n');
-      for (const m of gone?.media ?? []) { const mp = safeMediaPath(m.src); if (mp) await unlink(mp).catch(() => {}); }
+      for (const m of gone?.media ?? []) {
+        for (const src of [m.src, m.original]) { const mp = safeMediaPath(src); if (mp) await unlink(mp).catch(() => {}); }
+      }
       const tokens = await loadTokens(); delete tokens[`comment:${commentId}`]; await saveTokens(tokens);
       console.log(`✗ deleted reflection ${commentId}`);
       return send(res, 200, { ok: true });

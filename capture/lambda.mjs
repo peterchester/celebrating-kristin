@@ -200,11 +200,14 @@ export const handler = async (event) => {
 
   try {
     if (method === 'POST' && path === '/presign') {
-      const { filename, contentType } = s;
+      const { filename, contentType, kind } = s;
       const rand = randomBytes(3).toString('hex');
       const base = slug(String(filename || '').replace(/\.[^.]+$/, ''));
       const ext = (String(filename || '').match(/\.[^.]+$/) || [''])[0];
-      const key = `media/u/${rand}-${base}${ext}`;
+      // kind:'original' stashes the untouched upload under media/originals/ so
+      // the optimized version (default kind) at media/u/ is what the site shows.
+      const prefix = kind === 'original' ? 'media/originals/' : 'media/u/';
+      const key = `${prefix}${rand}-${base}${ext}`;
       // Sign only Content-Type (the browser sends it on PUT); CloudFront caches.
       const url = await getSignedUrl(
         s3,
@@ -271,8 +274,10 @@ export const handler = async (event) => {
       const entry = await getJson(SITE, `${ENTRIES}${id}.json`, null);
       await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: `${ENTRIES}${id}.json` })).catch(() => {});
       for (const m of entry?.media ?? []) {
-        const k = mediaKey(m.src);
-        if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+        for (const src of [m.src, m.original]) {
+          const k = mediaKey(src);
+          if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+        }
       }
       const tokens = await loadTokens();
       delete tokens[id];
@@ -324,8 +329,10 @@ export const handler = async (event) => {
       const gone = list.find((c) => c.id === commentId);
       await putJson(SITE, key, list.filter((c) => c.id !== commentId));
       for (const m of gone?.media ?? []) {
-        const k = mediaKey(m.src);
-        if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+        for (const src of [m.src, m.original]) {
+          const k = mediaKey(src);
+          if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+        }
       }
       const tokens = await loadTokens();
       delete tokens[`comment:${commentId}`];

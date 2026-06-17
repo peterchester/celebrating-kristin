@@ -81,6 +81,7 @@ const TURNSTILE_SITE_KEY =
 
 <script>
   import { bannerHTML, postContentHTML, reflectionHTML } from '../../lib/render';
+  import { uploadOne } from '../../lib/upload';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
   // JSON. API base: explicit PUBLIC_API_BASE, else derived from PUBLIC_SUBMIT_API.
@@ -235,16 +236,6 @@ const TURNSTILE_SITE_KEY =
     const secure = location.protocol === 'https:' ? '; secure' : '';
     document.cookie = 'rk_profile=' + encodeURIComponent(JSON.stringify(p)) + '; path=/; max-age=' + 365 * 86400 + '; samesite=Lax' + secure;
   }
-  async function uploadReflectionFile(file: File) {
-    const res = await fetch(PRESIGN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }) });
-    if (!res.ok) throw new Error('Could not get upload URL');
-    const { url, key } = await res.json();
-    const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-    if (!put.ok) throw new Error('Upload failed for ' + file.name);
-    const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'video';
-    return { type: kind, src: key, caption: '' };
-  }
-
   async function setupReflections() {
     const section = document.getElementById('reflections') as HTMLElement | null;
     const listEl = document.getElementById('reflections-list') as HTMLElement | null;
@@ -307,7 +298,7 @@ const TURNSTILE_SITE_KEY =
         if (!bodyText && !(files && files.length)) { statusEl!.textContent = 'Please write something, or add a photo, video, or audio.'; btn.disabled = false; return; }
         const media: any[] = [];
         if (files && files.length && PRESIGN) {
-          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadReflectionFile(file)); }
+          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadOne(file, PRESIGN)); }
         }
         const payload = {
           entryId: id,
