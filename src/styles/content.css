@@ -112,3 +112,27 @@
 .entry .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: 0.95rem; margin: 0 0 2rem; }
 .entry .byline strong { color: var(--ink); font-weight: 600; }
 .entry article p { margin: 0 0 1.3rem; }
+
+/* ── Reflection list items ─────────────────────────────────────────────────
+   These elements are created by JS (innerHTML) on the memory page, so they
+   never receive Astro's scoped-style attribute. Keep their styling global. */
+.reflection { border-top: 1px dashed rgba(180, 200, 255, 0.32); padding: 1.5rem 0; }
+.reflections-list .reflection:first-child { border-top: none; padding-top: 0; }
+.reflection-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 .5rem; }
+.reflection .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin: 0; }
+.reflection-body { font-family: Georgia, serif; }
+.reflection-body p { margin: 0 0 .8rem; }
+/* Matches the memory Delete button (same padding/border/radius/color), but
+   sits right-aligned in the byline flex row. */
+.reflection-del {
+  flex-shrink: 0;
+  padding: .45rem 1rem;
+  border: 1px solid rgba(255, 120, 100, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ff9a8a;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: .9rem;
+  cursor: pointer;
+}
+.reflection-del[hidden] { display: none; }
