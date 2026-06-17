@@ -5,6 +5,8 @@ interface Props {
   description?: string;
 }
 const { title = 'Celebrating Kristin', description = 'Stories, memories, and reflections.' } = Astro.props;
+// The footer is just the "Share a memory" CTA — pointless on the share page itself.
+const isShare = Astro.url.pathname.replace(/\/$/, '') === '/share';
 ---
 
 <!doctype html>
@@ -118,10 +120,12 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
     </video>
     <div class="bg-overlay" aria-hidden="true"></div>
     <div class="page"><slot /></div>
-    <footer class="site">
-      <div class="wrap">
-        <a class="share-cta" href="/share">Share a memory</a>
-      </div>
-    </footer>
+    {!isShare && (
+      <footer class="site">
+        <div class="wrap">
+          <a class="share-cta" href="/share">Share a memory</a>
+        </div>
+      </footer>
+    )}
   </body>
 </html>
