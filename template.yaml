@@ -23,6 +23,14 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Optional Cloudflare Turnstile secret. Blank skips captcha verification.
+  NotifyFrom:
+    Type: String
+    Default: ''
+    Description: Verified SES sender for reflection emails (e.g. reflections@celebrate.kristinallen.com). Blank disables emails.
+  SiteUrl:
+    Type: String
+    Default: ''
+    Description: Public site URL for links in notification emails (e.g. https://celebrate.kristinallen.com).
 
 Resources:
 
@@ -51,6 +59,8 @@ Resources:
           PRIVATE_BUCKET: !Ref PrivateBucket
           ADMIN_TOKEN: !Ref AdminToken
           TURNSTILE_SECRET: !Ref TurnstileSecret
+          NOTIFY_FROM: !Ref NotifyFrom
+          SITE_URL: !Ref SiteUrl
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -66,6 +76,10 @@ Resources:
             BucketName: !Ref SiteBucketName
         - S3CrudPolicy:
             BucketName: !Ref PrivateBucket
+        - Statement:
+            - Effect: Allow
+              Action: [ses:SendEmail, ses:SendRawEmail]
+              Resource: '*'
 
 Outputs:
   FunctionUrl:

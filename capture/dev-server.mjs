@@ -24,6 +24,7 @@ const PUBLIC = join(ROOT, 'public');
 // so the mock writes them under public/ (served by the dev server at those paths) —
 // mirroring what the AWS Lambda writes to S3. Both are gitignored local artifacts.
 const ENTRIES = join(PUBLIC, 'entries');
+const COMMENTS = join(PUBLIC, 'comments'); // comments/<entryId>.json — reflections
 const DATA_DIR = join(PUBLIC, 'data');
 const INDEX = join(DATA_DIR, 'index.json');
 const PRIVATE = join(ROOT, 'capture', 'private'); // emails, edit tokens — gitignored, never published
@@ -244,6 +245,58 @@ const server = createServer(async (req, res) => {
       await rebuildIndex();
       console.log(`✗ deleted entry ${id}${isAdmin(adminToken) ? ' (admin)' : ''}`);
       return send(res, 200, { ok: true, id });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/comment') {
+      const s = JSON.parse((await readBody(req)).toString() || '{}');
+      if (!/^[A-Za-z0-9_-]+$/.test(s.entryId || '')) return send(res, 400, { error: 'bad entry id' });
+      if (!s?.author?.name) return send(res, 400, { error: 'name is required' });
+      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
+        return send(res, 400, { error: 'add a reflection or a photo, video, or audio' });
+      if (!(await verifyTurnstile(s.turnstileToken, req.socket?.remoteAddress)))
+        return send(res, 403, { error: 'verification failed' });
+      if (!(await exists(join(ENTRIES, `${s.entryId}.json`)))) return send(res, 404, { error: 'no such memory' });
+
+      const commentId = randomBytes(8).toString('hex');
+      const reflection = {
+        id: commentId,
+        author: { name: String(s.author.name).trim(), ...(s.author.relationship ? { relationship: String(s.author.relationship).trim() } : {}) },
+        ...(s.body ? { body: String(s.body).trim() } : {}),
+        ...(Array.isArray(s.media) && s.media.length ? { media: s.media } : {}),
+        createdAt: new Date().toISOString(),
+      };
+      await mkdir(COMMENTS, { recursive: true });
+      const file = join(COMMENTS, `${s.entryId}.json`);
+      let list = [];
+      try { list = JSON.parse(await readFile(file, 'utf8')); } catch {}
+      list.push(reflection);
+      await writeFile(file, JSON.stringify(list, null, 2) + '\n');
+
+      const editToken = randomBytes(16).toString('hex');
+      const tokens = await loadTokens();
+      tokens[`comment:${commentId}`] = sha(editToken);
+      await saveTokens(tokens);
+
+      console.log(`✓ reflection on ${s.entryId} by ${reflection.author.name} (would email the author if SES were configured)`);
+      return send(res, 200, { ok: true, id: commentId, editToken });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/comment-delete') {
+      const { entryId, commentId, token, adminToken } = JSON.parse((await readBody(req)).toString() || '{}');
+      if (!/^[A-Za-z0-9_-]+$/.test(entryId || '') || !/^[A-Za-z0-9_-]+$/.test(commentId || ''))
+        return send(res, 400, { error: 'bad id' });
+      const want = (await loadTokens())[`comment:${commentId}`];
+      const allowed = isAdmin(adminToken) || (!!token && !!want && eq(sha(token), want));
+      if (!allowed) return send(res, 403, { error: 'not allowed' });
+      const file = join(COMMENTS, `${entryId}.json`);
+      let list = [];
+      try { list = JSON.parse(await readFile(file, 'utf8')); } catch {}
+      const gone = list.find((c) => c.id === commentId);
+      await writeFile(file, JSON.stringify(list.filter((c) => c.id !== commentId), null, 2) + '\n');
+      for (const m of gone?.media ?? []) { const mp = safeMediaPath(m.src); if (mp) await unlink(mp).catch(() => {}); }
+      const tokens = await loadTokens(); delete tokens[`comment:${commentId}`]; await saveTokens(tokens);
+      console.log(`✗ deleted reflection ${commentId}`);
+      return send(res, 200, { ok: true });
     }
 
     send(res, 404, { error: 'not found' });

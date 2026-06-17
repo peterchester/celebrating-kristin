@@ -88,6 +88,7 @@ aws s3 sync dist "s3://$BUCKET" \
   --delete \
   --exclude "_astro/*" \
   --exclude "entries/*" \
+  --exclude "comments/*" \
   --exclude "data/*" \
   --exclude "media/u/*" \
   --cache-control "public, max-age=0, must-revalidate"

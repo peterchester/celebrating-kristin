@@ -4,6 +4,10 @@ import Base from '../../layouts/Base.astro';
 // page; the script reads the slug from the URL, fetches /entries/<slug>.json, and
 // renders it in the browser — so new memories work with no rebuild. Markup +
 // styles for the body come from src/lib/render.ts + styles/content.css.
+
+// Cloudflare Turnstile site key for the reflection form (same default as the share form).
+const TURNSTILE_SITE_KEY =
+  import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
 ---
 
 <Base>
@@ -36,6 +40,33 @@ import Base from '../../layouts/Base.astro';
         <p id="ot-status" role="status" aria-live="polite"></p>
       </form>
     </section>
+
+    <section id="reflections" class="reflections" hidden>
+      <h2 class="reflections-title">Reflections</h2>
+      <div id="reflections-list" class="reflections-list"></div>
+      <form id="reflection-form" class="reflection-form">
+        <p class="rf-lede">Add yours — a memory, a thought, a photo.</p>
+        <label>
+          <span>Your name <span class="req">*</span></span>
+          <input name="name" type="text" required autocomplete="name" />
+        </label>
+        <label>
+          How did you know Kristin?
+          <input name="relationship" type="text" placeholder="Friend, cousin, coworker…" />
+        </label>
+        <label>
+          Your reflection
+          <textarea name="body" rows="4" placeholder="Share a memory or a few words…"></textarea>
+        </label>
+        <label>
+          Add a photo, audio, or video
+          <input name="media" type="file" multiple accept="image/*,audio/*,video/*" />
+        </label>
+        {TURNSTILE_SITE_KEY && <div class="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark"></div>}
+        <button type="submit">Add reflection</button>
+        <p id="rf-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
   </main>
 
   <nav class="memory-nav" aria-label="Memory navigation" hidden>
@@ -49,10 +80,11 @@ import Base from '../../layouts/Base.astro';
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
     </a>
   </nav>
+  {TURNSTILE_SITE_KEY && <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
 </Base>
 
 <script>
-  import { bannerHTML, postContentHTML } from '../../lib/render';
+  import { bannerHTML, postContentHTML, reflectionHTML } from '../../lib/render';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
   // JSON. API base: explicit PUBLIC_API_BASE, else derived from PUBLIC_SUBMIT_API.
@@ -60,6 +92,8 @@ import Base from '../../layouts/Base.astro';
   const API_BASE =
     import.meta.env.PUBLIC_API_BASE ||
     (SUBMIT ? SUBMIT.replace(/\/submit$/, '') : (import.meta.env.DEV ? 'http://localhost:8787' : ''));
+  const PRESIGN = import.meta.env.PUBLIC_PRESIGN_API || (API_BASE ? API_BASE + '/presign' : '');
+  const TURNSTILE_SITE_KEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
 
   const match = location.pathname.match(/^\/memory\/([^/]+)\/?$/);
   const id = match ? decodeURIComponent(match[1]) : '';
@@ -175,6 +209,131 @@ import Base from '../../layouts/Base.astro';
     });
   }
 
+  // ── Reflections (contributions others add to this memory) ──────────────────
+  function rememberOwner(oid: string, token: string) {
+    let list: any[] = [];
+    try { list = JSON.parse(cookie('rk_owner') || '[]'); } catch {}
+    list.push({ id: oid, token });
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = 'rk_owner=' + encodeURIComponent(JSON.stringify(list)) + '; path=/; max-age=' + 90 * 86400 + '; samesite=Lax' + secure;
+  }
+  function forgetOwner(oid: string) {
+    try {
+      const list = JSON.parse(cookie('rk_owner') || '[]').filter((e: any) => e.id !== oid);
+      const secure = location.protocol === 'https:' ? '; secure' : '';
+      document.cookie = 'rk_owner=' + encodeURIComponent(JSON.stringify(list)) + '; path=/; max-age=' + 90 * 86400 + '; samesite=Lax' + secure;
+    } catch {}
+  }
+  function loadProfileInto(form: HTMLFormElement) {
+    try {
+      const c = cookie('rk_profile'); if (!c) return;
+      const p = JSON.parse(c);
+      const set = (n: string, v?: string) => { const el = form.querySelector('[name="' + n + '"]') as HTMLInputElement | null; if (el && v) el.value = v; };
+      set('name', p.name); set('relationship', p.relationship);
+    } catch {}
+  }
+  function saveProfileFrom(form: HTMLFormElement) {
+    const fd = new FormData(form);
+    let prev: any = {}; try { prev = JSON.parse(cookie('rk_profile') || '{}'); } catch {}
+    const p = { ...prev, name: String(fd.get('name') || '').trim(), relationship: String(fd.get('relationship') || '').trim() };
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = 'rk_profile=' + encodeURIComponent(JSON.stringify(p)) + '; path=/; max-age=' + 365 * 86400 + '; samesite=Lax' + secure;
+  }
+  async function uploadReflectionFile(file: File) {
+    const res = await fetch(PRESIGN, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }) });
+    if (!res.ok) throw new Error('Could not get upload URL');
+    const { url, key } = await res.json();
+    const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
+    if (!put.ok) throw new Error('Upload failed for ' + file.name);
+    const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'video';
+    return { type: kind, src: key, caption: '' };
+  }
+
+  async function setupReflections() {
+    const section = document.getElementById('reflections') as HTMLElement | null;
+    const listEl = document.getElementById('reflections-list') as HTMLElement | null;
+    const form = document.getElementById('reflection-form') as HTMLFormElement | null;
+    const statusEl = document.getElementById('rf-status') as HTMLElement | null;
+    if (!section || !listEl || !form || !statusEl) return;
+    section.hidden = false;
+
+    const adminToken = cookie('rk_admin');
+    const owned = () => { try { return JSON.parse(cookie('rk_owner') || '[]'); } catch { return []; } };
+
+    async function deleteReflection(cid: string, token: string | null) {
+      if (!confirm('Delete this reflection?')) return;
+      try {
+        const r = await fetch(API_BASE + '/comment-delete', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ entryId: id, commentId: cid, token: token || undefined, adminToken: adminToken || undefined }),
+        });
+        if (!r.ok) throw new Error('Could not delete.');
+        if (token) forgetOwner('comment:' + cid);
+        render();
+      } catch (e) { alert((e as Error).message); }
+    }
+
+    async function render() {
+      let list: any[] = [];
+      try { const r = await fetch('/comments/' + encodeURIComponent(id) + '.json', { cache: 'no-store' }); if (r.ok) list = await r.json(); } catch {}
+      listEl!.innerHTML = list.map(reflectionHTML).join('');
+      const mine = owned();
+      listEl!.querySelectorAll('.reflection').forEach((el) => {
+        const cid = el.getAttribute('data-id') || '';
+        const own = mine.find((o: any) => o.id === 'comment:' + cid);
+        if (adminToken || own) {
+          const btn = el.querySelector('.reflection-del') as HTMLButtonElement | null;
+          if (btn) { btn.hidden = false; btn.addEventListener('click', () => deleteReflection(cid, own ? own.token : null)); }
+        }
+      });
+    }
+
+    loadProfileInto(form);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+      btn.disabled = true;
+      statusEl!.textContent = 'Sending…';
+      try {
+        if (!API_BASE) throw new Error('Reflections aren’t connected yet.');
+        const fd = new FormData(form);
+        const turnstileToken = String(fd.get('cf-turnstile-response') || '');
+        if (TURNSTILE_SITE_KEY && !turnstileToken) { statusEl!.textContent = 'Please complete the “I’m not a robot” check.'; btn.disabled = false; return; }
+        const bodyText = String(fd.get('body') || '').trim();
+        const files = (form.querySelector('input[name="media"]') as HTMLInputElement).files;
+        if (!bodyText && !(files && files.length)) { statusEl!.textContent = 'Please write something, or add a photo, video, or audio.'; btn.disabled = false; return; }
+        const media: any[] = [];
+        if (files && files.length && PRESIGN) {
+          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadReflectionFile(file)); }
+        }
+        const payload = {
+          entryId: id,
+          author: { name: String(fd.get('name') || '').trim(), relationship: String(fd.get('relationship') || '').trim() || undefined },
+          body: bodyText || undefined,
+          media,
+          turnstileToken: turnstileToken || undefined,
+        };
+        const r = await fetch(API_BASE + '/comment', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!r.ok) throw new Error('Could not post your reflection.');
+        const { id: cid, editToken } = await r.json();
+        if (cid && editToken) rememberOwner('comment:' + cid, editToken);
+        saveProfileFrom(form);
+        (form.querySelector('textarea[name="body"]') as HTMLTextAreaElement).value = '';
+        (form.querySelector('input[name="media"]') as HTMLInputElement).value = '';
+        statusEl!.textContent = 'Thank you for adding your reflection. 🤍';
+        await render();
+      } catch (err) {
+        statusEl!.textContent = (err as Error).message;
+      } finally {
+        btn.disabled = false;
+        if ((window as any).turnstile) (window as any).turnstile.reset();
+      }
+    });
+
+    render();
+  }
+
   // A just-submitted memory can take a beat to become readable (CloudFront/S3
   // propagation in production, or the dev file write locally). Retry briefly
   // before giving up, so the post-submit redirect doesn't land on "not found".
@@ -200,6 +359,7 @@ import Base from '../../layouts/Base.astro';
 
     setupNav(id);
     setupTools(entry);
+    setupReflections();
   }
 
   // Just arrived from a successful submission → show a fading thank-you.
@@ -282,4 +442,25 @@ import Base from '../../layouts/Base.astro';
   @media (prefers-reduced-motion: reduce) {
     .thanks-toast, .thanks-toast.show { transition: opacity .5s ease; transform: translateX(-50%); }
   }
+
+  /* Reflections */
+  .reflections { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--line); font-family: -apple-system, system-ui, sans-serif; }
+  .reflections-title { font-family: 'Vujahday Script', cursive; font-weight: 400; font-size: 2.6rem; line-height: 1; margin: 0 0 1.25rem; }
+  .reflection { border-top: 1px solid var(--line); padding: 1.25rem 0; }
+  .reflections-list .reflection:first-child { border-top: none; padding-top: 0; }
+  .reflection .byline { color: var(--soft); font-size: .9rem; margin: 0 0 .5rem; }
+  .reflection-body { font-family: Georgia, serif; }
+  .reflection-body p { margin: 0 0 .8rem; }
+  .reflection-del { margin-top: .5rem; padding: .3rem .8rem; border: 1px solid rgba(255, 120, 100, .35); border-radius: 999px; background: rgba(255, 255, 255, .05); color: #ff9a8a; font: inherit; font-size: .8rem; cursor: pointer; }
+  .reflection-del[hidden] { display: none; }
+
+  .reflection-form { margin-top: 2.5rem; display: grid; gap: 1rem; }
+  .reflection-form .rf-lede { color: var(--soft); margin: 0; }
+  .reflection-form label { display: grid; gap: .35rem; font-size: .9rem; }
+  .reflection-form .req { color: #ff9a8a; }
+  .reflection-form input, .reflection-form textarea { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; background: rgba(255, 255, 255, .05); color: var(--ink); }
+  .reflection-form textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
+  .reflection-form button[type="submit"] { justify-self: start; padding: .6rem 1.4rem; border: none; border-radius: 999px; background: linear-gradient(120deg, #7ee8c9, #8fd0f0); color: #08111f; font: inherit; font-weight: 600; cursor: pointer; }
+  .reflection-form button[type="submit"]:disabled { opacity: .6; cursor: default; }
+  #rf-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
 </style>

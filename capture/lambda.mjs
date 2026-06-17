@@ -22,15 +22,20 @@ import {
   DeleteObjectCommand, ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
 const s3 = new S3Client({});
+const ses = new SESClient({});
 const SITE = process.env.SITE_BUCKET;          // public bucket (entries + media)
 const PRIV = process.env.PRIVATE_BUCKET;       // private bucket (tokens + emails)
 const ADMIN = process.env.ADMIN_TOKEN || '';   // optional admin override
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''; // optional captcha
+const NOTIFY_FROM = process.env.NOTIFY_FROM || '';          // SES sender; blank = no emails
+const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, ''); // for links in emails
 
 const ENTRIES = 'entries/';        // entries/<id>.json  (public)
+const COMMENTS = 'comments/';      // comments/<entryId>.json — array of reflections (public)
 const INDEX = 'data/index.json';   // the list the site reads (public, derived)
 const TOKENS = 'tokens.json';      // { id: sha256(editToken) }  (private)
 const CONTACTS = 'contacts.jsonl'; // one {id,name,email} per line (private)
@@ -146,6 +151,41 @@ async function rebuildIndex() {
 const mediaKey = (src) =>
   typeof src === 'string' && src.startsWith('/media/') && !src.includes('..') ? src.slice(1) : null;
 
+// Look up the memory author's email from the private contacts log (last wins).
+async function authorEmail(entryId) {
+  const text = await getText(PRIV, CONTACTS, '');
+  let found = null;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try { const c = JSON.parse(line); if (c.id === entryId && c.email) found = c; } catch {}
+  }
+  return found; // { id, name, email } | null
+}
+
+// Best-effort email to the memory's author when someone adds a reflection.
+// Silently does nothing if SES isn't configured or the author left no email.
+async function notifyAuthor(entryId, reflectorName) {
+  if (!NOTIFY_FROM) return;
+  const to = await authorEmail(entryId);
+  if (!to?.email) return;
+  const entry = await getJson(SITE, `${ENTRIES}${entryId}.json`, null);
+  const title = entry?.title || 'your memory';
+  const link = SITE_URL ? `${SITE_URL}/memory/${entryId}` : '';
+  const body =
+    `Hi ${to.name || ''},\n\n` +
+    `${reflectorName} just added a reflection to "${title}" on Celebrating Kristin.\n\n` +
+    (link ? `Read it here:\n${link}\n\n` : '') +
+    `With love,\nCelebrating Kristin`;
+  await ses.send(new SendEmailCommand({
+    Source: NOTIFY_FROM,
+    Destination: { ToAddresses: [to.email] },
+    Message: {
+      Subject: { Data: `${reflectorName} added a reflection to "${title}"` },
+      Body: { Text: { Data: body } },
+    },
+  }));
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
   const method = event?.requestContext?.http?.method || 'GET';
@@ -240,6 +280,60 @@ export const handler = async (event) => {
 
       await rebuildIndex();
       return json(200, { ok: true, id });
+    }
+
+    if (method === 'POST' && path === '/comment') {
+      if (!safeId(s.entryId)) return json(400, { error: 'bad entry id' });
+      if (!s?.author?.name) return json(400, { error: 'name is required' });
+      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
+        return json(400, { error: 'add a reflection or a photo, video, or audio' });
+      if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'verification failed' });
+      if (!(await exists(SITE, `${ENTRIES}${s.entryId}.json`))) return json(404, { error: 'no such memory' });
+
+      const commentId = randomBytes(8).toString('hex');
+      const reflection = {
+        id: commentId,
+        author: {
+          name: String(s.author.name).trim(),
+          ...(s.author.relationship ? { relationship: String(s.author.relationship).trim() } : {}),
+        },
+        ...(s.body ? { body: String(s.body).trim() } : {}),
+        ...(Array.isArray(s.media) && s.media.length ? { media: s.media } : {}),
+        createdAt: new Date().toISOString(),
+      };
+      const key = `${COMMENTS}${s.entryId}.json`;
+      const list = await getJson(SITE, key, []);
+      list.push(reflection);
+      await putJson(SITE, key, list);
+
+      const editToken = randomBytes(16).toString('hex');
+      const tokens = await loadTokens();
+      tokens[`comment:${commentId}`] = sha(editToken);
+      await saveTokens(tokens);
+
+      await notifyAuthor(s.entryId, reflection.author.name).catch((e) => console.error('notify failed', e));
+      return json(200, { ok: true, id: commentId, editToken });
+    }
+
+    if (method === 'POST' && path === '/comment-delete') {
+      const { entryId, commentId, token, adminToken } = s;
+      if (!safeId(entryId) || !safeId(commentId)) return json(400, { error: 'bad id' });
+      const want = (await loadTokens())[`comment:${commentId}`];
+      const allowed = isAdmin(adminToken) || (!!token && !!want && eq(sha(token), want));
+      if (!allowed) return json(403, { error: 'not allowed' });
+
+      const key = `${COMMENTS}${entryId}.json`;
+      const list = await getJson(SITE, key, []);
+      const gone = list.find((c) => c.id === commentId);
+      await putJson(SITE, key, list.filter((c) => c.id !== commentId));
+      for (const m of gone?.media ?? []) {
+        const k = mediaKey(m.src);
+        if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+      }
+      const tokens = await loadTokens();
+      delete tokens[`comment:${commentId}`];
+      await saveTokens(tokens);
+      return json(200, { ok: true });
     }
 
     return json(404, { error: 'not found' });

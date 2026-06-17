@@ -145,3 +145,37 @@ export function postContentHTML(entry: Entry): string {
   html += media.slice(1).map(mediaHTML).join('');
   return html;
 }
+
+// ── Reflections (contributions others add to a memory) ───────────────────────
+function shortDate(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+export interface Reflection {
+  id: string;
+  author: { name: string; relationship?: string };
+  body?: string;
+  media?: MediaItem[];
+  createdAt?: string;
+}
+
+export function reflectionHTML(r: Reflection): string {
+  const rel = r.author?.relationship ? `<span> · Kristin's ${esc(r.author.relationship.toLowerCase())}</span>` : '';
+  const when = shortDate(r.createdAt);
+  const date = when ? `<span class="date"> · ${esc(when)}</span>` : '';
+  const paragraphs = (r.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const body = paragraphs.length
+    ? `<div class="reflection-body">${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</div>`
+    : '';
+  const media = (r.media || []).map(mediaHTML).join('');
+  return (
+    `<article class="reflection" data-id="${esc(r.id)}">` +
+    `<p class="byline">${esc(r.author?.name || '')}${rel}${date}</p>` +
+    body + media +
+    `<button type="button" class="reflection-del" hidden>Delete</button>` +
+    `</article>`
+  );
+}
