@@ -15,6 +15,9 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
     <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Vujahday+Script&display=swap" rel="stylesheet" />
     <style is:global>
       :root {
         --ink: #e9ecf6;          /* soft cool white — primary text */
@@ -76,6 +79,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
       }
       .page { flex: 1 0 auto; }
       a { color: var(--accent); }
+      h1 { font-family: 'Vujahday Script', cursive; }
       .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
       /* Full-screen looping background video; the body's aurora gradient shows
          through as a fallback if it can't play. Overlay keeps text legible. */
