@@ -67,8 +67,14 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
           linear-gradient(to bottom, #0b1330 0%, #0a0e20 50%, #070a16 100%);
         background-attachment: fixed;
         background-repeat: no-repeat;
+        /* Sticky footer: column layout where the page content grows to fill the
+           viewport, so the footer always sits at the very bottom (no gap below)
+           and is off-screen until you scroll down to it. */
         min-height: 100vh;
+        display: flex;
+        flex-direction: column;
       }
+      .page { flex: 1 0 auto; }
       a { color: var(--accent); }
       .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
       /* Full-screen looping background video; the body's aurora gradient shows
@@ -91,8 +97,9 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
       }
       .share-cta:hover { box-shadow: 0 0 34px rgba(120, 230, 200, 0.55); }
       footer.site {
+        flex-shrink: 0;
         text-align: center; color: var(--soft); font-size: .85rem;
-        padding: 5rem 1.25rem 3.5rem; margin-top: 4rem;
+        padding: 8rem 1.25rem 5.5rem; margin-top: 4rem;
         /* Fade from the night sky down into a deep purple beneath the text. */
         background: linear-gradient(to bottom, transparent, #160a30 85%);
       }
@@ -105,7 +112,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
       <source src="/img/background.mp4" type="video/mp4" />
     </video>
     <div class="bg-overlay" aria-hidden="true"></div>
-    <slot />
+    <div class="page"><slot /></div>
     <footer class="site">
       <div class="wrap">
         <p><a href="/share">Share your memories while they're fresh.</a></p>
