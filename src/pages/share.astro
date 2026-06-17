@@ -174,9 +174,13 @@ const TURNSTILE_SITE_KEY =
 
       const media = [];
       if (files && files.length && PRESIGN_API) {
+        const ctx = {
+          author: String(fd.get('name') || '').trim() || undefined,
+          title: String(fd.get('title') || '').trim() || undefined,
+        };
         for (const file of Array.from(files)) {
           setStatus(`Uploading ${file.name}…`);
-          media.push(await uploadOne(file, PRESIGN_API));
+          media.push(await uploadOne(file, PRESIGN_API, ctx));
         }
       }
 

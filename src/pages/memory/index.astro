@@ -298,7 +298,10 @@ const TURNSTILE_SITE_KEY =
         if (!bodyText && !(files && files.length)) { statusEl!.textContent = 'Please write something, or add a photo, video, or audio.'; btn.disabled = false; return; }
         const media: any[] = [];
         if (files && files.length && PRESIGN) {
-          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadOne(file, PRESIGN)); }
+          // For reflections we have no title; the parent memory's slug is the
+          // closest equivalent, and gives the file useful archive context.
+          const ctx = { author: String(fd.get('name') || '').trim() || undefined, title: id || undefined };
+          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadOne(file, PRESIGN, ctx)); }
         }
         const payload = {
           entryId: id,
