@@ -7,9 +7,12 @@
     "dev": "astro dev",
     "capture": "node capture/dev-server.mjs",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "deploy-frontend": "./deploy.sh",
+    "deploy-backend": "sam deploy --stack-name celebrate-kristin-backend --region us-east-1 --resolve-s3 --capabilities=CAPABILITY_IAM --parameter-overrides SiteBucketName=celebrate-kristinallen-com AllowOrigin=https://celebrate.kristinallen.com \"AdminToken={$ADMIN_TOKEN}\"",
+    "deploy-all": "npm run deploy-frontend && npm run deploy-backend"
   },
   "dependencies": {
-    "astro": "^5.6.0"
+    "astro": "^6.4.8"
   }
 }
