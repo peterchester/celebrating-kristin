@@ -175,14 +175,24 @@ import Base from '../../layouts/Base.astro';
     });
   }
 
+  // A just-submitted memory can take a beat to become readable (CloudFront/S3
+  // propagation in production, or the dev file write locally). Retry briefly
+  // before giving up, so the post-submit redirect doesn't land on "not found".
+  async function fetchEntry(entryId: string) {
+    for (let i = 0; i < 4; i++) {
+      try {
+        const r = await fetch('/entries/' + encodeURIComponent(entryId) + '.json', { cache: 'no-store' });
+        if (r.ok) return await r.json();
+      } catch {}
+      if (i < 3) await new Promise((res) => setTimeout(res, 350 + i * 300));
+    }
+    return null;
+  }
+
   async function main() {
     if (!id) return showNotFound();
-    let entry: any;
-    try {
-      const r = await fetch('/entries/' + encodeURIComponent(id) + '.json', { cache: 'no-store' });
-      if (!r.ok) return showNotFound();
-      entry = await r.json();
-    } catch { return showNotFound(); }
+    const entry = await fetchEntry(id);
+    if (!entry) return showNotFound();
 
     document.title = (entry.title ? entry.title : 'A memory from ' + (entry.author?.name || 'a friend')) + ' — Celebrating Kristin';
     if (bannerEl) bannerEl.innerHTML = bannerHTML(entry);
