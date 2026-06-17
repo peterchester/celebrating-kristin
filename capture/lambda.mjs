@@ -175,7 +175,9 @@ export const handler = async (event) => {
     }
 
     if (method === 'POST' && path === '/submit') {
-      if (!s?.author?.name || !s?.body) return json(400, { error: 'name and memory are required' });
+      if (!s?.author?.name) return json(400, { error: 'name is required' });
+      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
+        return json(400, { error: 'add a memory or at least one photo, video, or audio' });
       if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'verification failed' });
 
       const now = new Date();

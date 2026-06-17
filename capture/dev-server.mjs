@@ -168,7 +168,9 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/submit') {
       const s = JSON.parse((await readBody(req)).toString() || '{}');
-      if (!s?.author?.name || !s?.body) return send(res, 400, { error: 'name and memory are required' });
+      if (!s?.author?.name) return send(res, 400, { error: 'name is required' });
+      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
+        return send(res, 400, { error: 'add a memory or at least one photo, video, or audio' });
       if (!(await verifyTurnstile(s.turnstileToken, req.socket?.remoteAddress)))
         return send(res, 403, { error: 'verification failed' });
 

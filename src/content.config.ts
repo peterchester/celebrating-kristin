@@ -18,7 +18,8 @@ const entries = defineCollection({
       relationship: z.string().optional(),
     }),
     title: z.string().optional(),
-    body: z.string().min(1),
+    body: z.string().optional(), // optional — a memory may be media-only
+
     media: z
       .array(
         z.object({

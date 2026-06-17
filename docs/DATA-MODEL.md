@@ -31,7 +31,7 @@ Ordering ("most recent") comes from the `submittedAt` field, not the filename.
     "relationship": "College roommate"  // optional — free text, shown publicly
   },
   "title": "The road trip to Big Sur",  // optional — a headline for the story
-  "body": "We left at 4am...\n\nBy noon we were...",  // required — the story, plain text / light Markdown
+  "body": "We left at 4am...\n\nBy noon we were...",  // optional — the story (a memory may be media-only)
   "media": [                            // optional — 0 or more attachments
     {
       "type": "image",                  // "image" | "audio" | "video"
@@ -59,10 +59,12 @@ must stay in sync** — Zod is the law, this is the explanation.
   first) but is *never displayed*. `memoryDate` is the optional date the memory
   itself happened; it's the only date readers see, and only when given. It must be
   in the past — future dates are treated as errors and dropped at capture time.
-- **`body`** — stored as plain text. Blank lines separate paragraphs. It is
-  rendered through Astro's auto-escaping, so user text can never inject HTML/JS
-  into the page. (We can upgrade to full Markdown later by adding a renderer; the
-  stored format doesn't change.)
+- **`body`** — *optional*: a memory may be media-only. A valid submission needs
+  a `name` plus **either** a `body` or at least one `media` item (enforced on the
+  form and in the backend). Stored as plain text; blank lines separate paragraphs.
+  It is rendered through Astro's auto-escaping, so user text can never inject
+  HTML/JS into the page. (We can upgrade to full Markdown later by adding a
+  renderer; the stored format doesn't change.)
 - **`media[].src`** — a path under `public/`, i.e. `/media/<entry-id>/<file>`.
   During capture these may temporarily be S3 keys; the *freeze* step downloads
   them into `public/media/` and rewrites the paths to local ones.

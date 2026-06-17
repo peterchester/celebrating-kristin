@@ -40,8 +40,9 @@ const TURNSTILE_SITE_KEY =
       </label>
 
       <label>
-        Your memory <span class="req">*</span>
-        <textarea name="body" rows="10" required placeholder="Take your time…"></textarea>
+        Your memory
+        <textarea name="body" rows="10" placeholder="Take your time…"></textarea>
+        <small>A few words or a whole story — or leave it blank and just share a photo, video, or recording below.</small>
       </label>
 
       <label>
@@ -162,6 +163,14 @@ const TURNSTILE_SITE_KEY =
 
       const files = (form.querySelector('input[name="media"]') as HTMLInputElement).files;
 
+      // A memory needs words or media — but not necessarily both.
+      const bodyText = String(fd.get('body') || '').trim();
+      if (!bodyText && !(files && files.length)) {
+        setStatus('Please write a memory, or add a photo, video, or audio.', 'err');
+        btn.disabled = false;
+        return;
+      }
+
       const media = [];
       if (files && files.length && PRESIGN_API) {
         for (const file of Array.from(files)) {
@@ -179,7 +188,7 @@ const TURNSTILE_SITE_KEY =
         },
         title: String(fd.get('title') || '').trim() || undefined,
         memoryDate: String(fd.get('memoryDate') || '') || undefined, // validated server-side
-        body: String(fd.get('body') || '').trim(),
+        body: bodyText || undefined,
         media,
         email: String(fd.get('email') || '').trim() || undefined, // private — backend stores separately
         turnstileToken: turnstileToken || undefined, // verified server-side, never stored

@@ -41,8 +41,9 @@ export function cardHTML(entry: Entry): string {
       : null;
   const kind = firstImage ? 'image' : firstVideo ? 'video' : hasAudio ? 'audio' : 'text';
 
-  const firstPara = entry.body.split(/\n\s*\n/)[0].trim();
+  const firstPara = (entry.body || '').split(/\n\s*\n/)[0].trim();
   const excerpt = truncate(firstPara, kind === 'text' ? 320 : 180);
+  const excerptHTML = excerpt ? `<p class="excerpt">${esc(excerpt)}</p>` : '';
 
   let coverHTML = '';
   if (cover) {
@@ -75,7 +76,7 @@ export function cardHTML(entry: Entry): string {
     `<div class="body">` +
     (entry.title ? `<h2>${esc(entry.title)}</h2>` : '') +
     `<p class="byline">${esc(entry.author.name)}${rel}</p>` +
-    `<p class="excerpt">${esc(excerpt)}</p>${chipsHTML}` +
+    `${excerptHTML}${chipsHTML}` +
     `</div></a>`
   );
 }
@@ -118,7 +119,7 @@ export function postContentHTML(entry: Entry): string {
   const media = entry.media ?? [];
   const lead = media[0];
   const hasBanner = !!lead && (lead.type === 'image' || lead.type === 'video');
-  const paragraphs = entry.body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  const paragraphs = (entry.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const dl = dateLabel(entry.memoryDate);
   const rel = entry.author.relationship ? `<span> · ${esc(entry.author.relationship)}</span>` : '';
   const date = dl ? `<span class="date"> · ${esc(dl)}</span>` : '';
