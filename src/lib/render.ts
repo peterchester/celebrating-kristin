@@ -70,7 +70,7 @@ export function cardHTML(entry: Entry): string {
   if (hasAudio && kind !== 'audio') chips.push(`<span class="chip">♪ audio</span>`);
   const chipsHTML = chips.length ? `<p class="chips">${chips.join('')}</p>` : '';
 
-  const rel = entry.author.relationship ? `<span> · ${esc(entry.author.relationship)}</span>` : '';
+  const rel = entry.author.relationship ? `<span> · Kristin's ${esc(entry.author.relationship)}</span>` : '';
   return (
     `<a class="card kind-${kind}" href="/memory/${esc(entry.id)}">${coverHTML}` +
     `<div class="body">` +
@@ -121,7 +121,7 @@ export function postContentHTML(entry: Entry): string {
   const hasBanner = !!lead && (lead.type === 'image' || lead.type === 'video');
   const paragraphs = (entry.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const dl = dateLabel(entry.memoryDate);
-  const rel = entry.author.relationship ? `<span> · ${esc(entry.author.relationship)}</span>` : '';
+  const rel = entry.author.relationship ? `<span> · Kristin's ${esc(entry.author.relationship)}</span>` : '';
   const date = dl ? `<span class="date"> · Remembering ${esc(dl)}</span>` : '';
 
   let html = '';
