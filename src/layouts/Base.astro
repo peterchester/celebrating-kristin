@@ -5,8 +5,10 @@ interface Props {
   description?: string;
 }
 const { title = 'Celebrating Kristin', description = 'Stories, memories, and reflections.' } = Astro.props;
-// The footer is just the "Share a memory" CTA — pointless on the share page itself.
-const isShare = Astro.url.pathname.replace(/\/$/, '') === '/share';
+// The footer is just the "Share a memory" CTA — hide it on the share page and on
+// single memory pages (which already have their own nav).
+const fp = Astro.url.pathname.replace(/\/$/, '');
+const hideFooter = fp === '/share' || fp === '/memory';
 ---
 
 <!doctype html>
@@ -120,7 +122,7 @@ const isShare = Astro.url.pathname.replace(/\/$/, '') === '/share';
     </video>
     <div class="bg-overlay" aria-hidden="true"></div>
     <div class="page"><slot /></div>
-    {!isShare && (
+    {!hideFooter && (
       <footer class="site">
         <div class="wrap">
           <a class="share-cta" href="/share">Share a memory</a>
