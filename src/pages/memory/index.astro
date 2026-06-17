@@ -290,6 +290,12 @@ const TURNSTILE_SITE_KEY =
 
     loadProfileInto(form);
 
+    // Keep name / relationship sticky the moment they change (shared with the
+    // share form via the rk_profile cookie).
+    ['name', 'relationship'].forEach((n) => {
+      form!.querySelector(`[name="${n}"]`)?.addEventListener('change', () => saveProfileFrom(form!));
+    });
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement;

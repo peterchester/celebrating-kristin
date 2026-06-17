@@ -129,6 +129,20 @@ const TURNSTILE_SITE_KEY =
   }
   loadProfile();
 
+  // Persist identity the moment it changes (not just on submit) so name /
+  // relationship / email stay sticky across the share form and reflection forms.
+  ['name', 'relationship', 'email'].forEach((n) => {
+    form.querySelector(`[name="${n}"]`)?.addEventListener('change', () => {
+      let prev: any = {};
+      try {
+        const c = document.cookie.split('; ').find((x) => x.startsWith('rk_profile='));
+        if (c) prev = JSON.parse(decodeURIComponent(c.slice('rk_profile='.length)));
+      } catch {}
+      const g = (k: string) => String((form.querySelector(`[name="${k}"]`) as HTMLInputElement | null)?.value || '').trim();
+      saveProfile({ ...prev, name: g('name') || prev.name, relationship: g('relationship'), email: g('email') || prev.email });
+    });
+  });
+
   async function uploadFile(file: File) {
     // Ask the backend for a presigned URL, then PUT the bytes straight to storage.
     const res = await fetch(PRESIGN_API, {
