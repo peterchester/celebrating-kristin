@@ -11,7 +11,7 @@
 // flag tells the backend to stash the file under media/originals/ instead of
 // media/u/.
 
-const MAX_DIM = 2400;
+const MAX_DIM = 2000;
 const JPEG_QUALITY = 0.85;
 
 export interface UploadedMedia {
