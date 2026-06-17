@@ -90,7 +90,12 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
         box-shadow: 0 0 24px rgba(120, 230, 200, 0.35);
       }
       .share-cta:hover { box-shadow: 0 0 34px rgba(120, 230, 200, 0.55); }
-      footer.site { text-align: center; color: var(--soft); font-size: .85rem; padding: 3rem 1.25rem; border-top: 1px solid var(--line); margin-top: 4rem; }
+      footer.site {
+        text-align: center; color: var(--soft); font-size: .85rem;
+        padding: 5rem 1.25rem 3.5rem; margin-top: 4rem;
+        /* Fade from the night sky down into a deep purple beneath the text. */
+        background: linear-gradient(to bottom, transparent, #160a30 85%);
+      }
       footer.site a { color: var(--soft); }
     </style>
   </head>
@@ -103,7 +108,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
     <slot />
     <footer class="site">
       <div class="wrap">
-        <p>Made with love. <a href="/share">Share a memory →</a></p>
+        <p><a href="/share">Share your memories while they're fresh.</a></p>
       </div>
     </footer>
   </body>
