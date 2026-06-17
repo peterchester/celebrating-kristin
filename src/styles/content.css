@@ -38,7 +38,7 @@
 .card .wave rect { fill: var(--accent-2); opacity: 0.85; }
 .card .audio-cover .badge {
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
-  color: var(--accent); letter-spacing: 0.04em; line-height: 1;
+  color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
 }
 .card .body { padding: 1.2rem 1.4rem 1.4rem; }
 .card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 2.5rem; line-height: 1.05; font-family: 'Vujahday Script', cursive; }
