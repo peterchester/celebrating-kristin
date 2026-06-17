@@ -108,6 +108,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
         background: linear-gradient(to bottom, transparent, #160a30 85%);
       }
       footer.site a { color: var(--soft); }
+      footer.site a.share-cta { color: #08111f; } /* keep the button's dark text */
     </style>
   </head>
   <body>
@@ -119,7 +120,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
     <div class="page"><slot /></div>
     <footer class="site">
       <div class="wrap">
-        <p><a href="/share">Share your memories while they're fresh.</a></p>
+        <p><a class="share-cta" href="/share">Share your memories while they're fresh.</a></p>
       </div>
     </footer>
   </body>
