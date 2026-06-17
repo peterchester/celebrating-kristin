@@ -122,11 +122,11 @@ export function postContentHTML(entry: Entry): string {
   const paragraphs = (entry.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const dl = dateLabel(entry.memoryDate);
   const rel = entry.author.relationship ? `<span> · ${esc(entry.author.relationship)}</span>` : '';
-  const date = dl ? `<span class="date"> · ${esc(dl)}</span>` : '';
+  const date = dl ? `<span class="date"> · Remembering ${esc(dl)}</span>` : '';
 
   let html = '';
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
-  html += `<p class="byline"><strong>${esc(entry.author.name)}</strong>${rel}${date}</p>`;
+  html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
   if (!hasBanner && lead) html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}</article>`;
   html += media.slice(1).map(mediaHTML).join('');
