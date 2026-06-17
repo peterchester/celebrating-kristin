@@ -27,6 +27,20 @@ export const esc = (s: unknown): string =>
 
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + '…' : s);
 
+// Escape text, then turn bare URLs (http(s):// or www.) into clickable links.
+// Safe by construction: escaping runs first (no raw HTML survives), and only
+// http/https URLs are linked — never javascript:/data:. Trailing sentence
+// punctuation is left outside the link. Used for the post body only.
+function linkify(text: string): string {
+  return esc(text).replace(/((?:https?:\/\/|www\.)[^\s<]+)/gi, (m) => {
+    const t = m.match(/[.,;:!?]+$/);
+    const trail = t ? t[0] : '';
+    if (trail) m = m.slice(0, -trail.length);
+    const href = m.toLowerCase().startsWith('www.') ? 'https://' + m : m;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${m}</a>${trail}`;
+  });
+}
+
 // ── Home gallery card (mirrors MemoryCard.astro) ─────────────────────────────
 export function cardHTML(entry: Entry): string {
   const media = entry.media ?? [];
@@ -127,7 +141,7 @@ export function postContentHTML(entry: Entry): string {
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
   html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
   if (!hasBanner && lead) html += mediaHTML(lead);
-  html += `<article>${paragraphs.map((p) => `<p>${esc(p)}</p>`).join('')}</article>`;
+  html += `<article>${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</article>`;
   html += media.slice(1).map(mediaHTML).join('');
   return html;
 }
