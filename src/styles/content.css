@@ -34,7 +34,9 @@
     radial-gradient(120% 90% at 92% 100%, rgba(126, 232, 201, 0.22), transparent 70%),
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
-.card .wave { width: 60%; height: 80px; }
+/* Width drives size; height comes from the SVG's 3:1 viewBox, with a max so the
+   wave stays within the audio cover on wider cards. */
+.card .wave { width: 60%; height: auto; max-height: 80px; }
 .card .wave rect { fill: var(--accent-2); opacity: 0.85; }
 .card .audio-cover .badge {
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
@@ -51,15 +53,15 @@
     radial-gradient(120% 90% at 92% 100%, rgba(126, 232, 201, 0.22), transparent 70%),
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
-/* Oversize the strip so the rotated bounding box still fully covers the area,
-   then rotate ≈ -22°. preserveAspectRatio=none on the SVG lets us pick the
-   strip's visible thickness explicitly via height. color drives the fill. */
+/* Oversize the strip so the rotated bounding box covers the cover, but let
+   height come from the 6:1 viewBox so the perforations stay square and the
+   frames keep their proportions at every card width. color drives the fill. */
 .card .video-cover .film-mark {
   position: absolute;
   left: -25%;
   top: 50%;
   width: 150%;
-  height: 64px;
+  height: auto;
   transform: translateY(-50%) rotate(-22deg);
   color: var(--accent-2);
   opacity: 0.9;
