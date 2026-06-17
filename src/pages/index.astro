@@ -91,7 +91,10 @@ import Base from '../layouts/Base.astro';
     text-shadow: 0 1px 24px rgba(0,0,0,.4);
   }
   .hero-text p {
-    margin: 0 0 1.5rem;
+    /* The title can use the full (wide) hero box, but keep the lede at a
+       comfortable reading width, right-aligned within it. */
+    max-width: 30rem;
+    margin: 0 0 1.5rem auto;
     color: rgba(255,255,255,.94);
     font-style: italic;
     text-shadow: 0 1px 12px rgba(0,0,0,.45);
@@ -106,6 +109,7 @@ import Base from '../layouts/Base.astro';
               mask-image: linear-gradient(to bottom, #000 28%, rgba(0, 0, 0, 0.55) 68%, rgba(0, 0, 0, 0) 100%);
     }
     .hero-text { margin: 0; max-width: none; width: 100%; text-align: center; padding-bottom: 2.5rem; }
+    .hero-text p { max-width: none; margin-inline: auto; } /* center the lede on mobile */
   }
 
   main { padding-top: 2.5rem; max-width: 1020px; }
