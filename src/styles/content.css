@@ -35,9 +35,7 @@
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
 .card .wave { width: 60%; height: 40px; }
-.card .wave rect { opacity: 0.85; }
-.card .wave rect:nth-child(odd) { fill: var(--accent); }
-.card .wave rect:nth-child(even) { fill: var(--accent-2); }
+.card .wave rect { fill: var(--accent-2); opacity: 0.85; }
 .card .audio-cover .badge {
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
   color: var(--accent); letter-spacing: 0.04em; line-height: 1;
