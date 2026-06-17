@@ -7,6 +7,7 @@ import Base from '../../layouts/Base.astro';
 ---
 
 <Base>
+  <div id="thanks-toast" class="thanks-toast" role="status">Thank you for sharing this memory. 🤍</div>
   <div id="post-banner"></div>
 
   <main class="wrap entry">
@@ -191,6 +192,20 @@ import Base from '../../layouts/Base.astro';
     setupTools(entry);
   }
 
+  // Just arrived from a successful submission → show a fading thank-you.
+  function showThanks() {
+    const t = document.getElementById('thanks-toast');
+    if (!t) return;
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => t.classList.remove('show'), 4500);
+  }
+  try {
+    if (sessionStorage.getItem('rk_justShared')) {
+      sessionStorage.removeItem('rk_justShared');
+      showThanks();
+    }
+  } catch {}
+
   main();
 </script>
 
@@ -236,4 +251,23 @@ import Base from '../../layouts/Base.astro';
   .nav-btn.disabled { color: rgba(154, 166, 201, 0.35); pointer-events: none; }
 
   :global(footer.site) { margin-bottom: 5rem; }
+
+  /* Fading thank-you shown after a successful submission. */
+  .thanks-toast {
+    position: fixed; top: calc(1rem + env(safe-area-inset-top, 0px)); left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    z-index: 50; max-width: min(92vw, 30rem); text-align: center;
+    padding: .7rem 1.2rem; border-radius: 999px;
+    background: rgba(14, 18, 38, 0.82);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 1px solid var(--line); color: var(--ink);
+    font-family: -apple-system, system-ui, sans-serif; font-size: .95rem;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 22px var(--glow);
+    opacity: 0; pointer-events: none;
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  .thanks-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .thanks-toast, .thanks-toast.show { transition: opacity .5s ease; transform: translateX(-50%); }
+  }
 </style>

@@ -201,9 +201,16 @@ const TURNSTILE_SITE_KEY =
       const { id, editToken } = await res.json();
       if (id && editToken) rememberOwner(id, editToken);
 
-      // Remember identity for next time, then re-fill it after the reset clears
-      // the memory-specific fields.
+      // Remember identity for next time.
       saveProfile({ name: submission.author.name, relationship: submission.author.relationship || '', email: submission.email || '' });
+
+      // Take them to their new memory so they can see it. The post page shows a
+      // fading thank-you, flagged via sessionStorage across the navigation.
+      if (id) {
+        try { sessionStorage.setItem('rk_justShared', '1'); } catch {}
+        location.href = '/memory/' + id;
+        return;
+      }
       form.reset();
       loadProfile();
       setStatus('Thank you. Your memory has been shared. 🤍 You can edit or remove it from its page on this device.', 'ok');
