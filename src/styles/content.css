@@ -40,23 +40,29 @@
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
   color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
 }
-/* Posterless-video card: same aurora background as the audio cover, with a
-   large play triangle in the same purple. Sized to match audio (h:132px). */
+/* Posterless-video card: an aurora background with a diagonal filmstrip
+   running across it, cropped to the cover bounds. */
 .card .video-cover {
-  height: 132px; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 0.6rem;
+  height: 132px;
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(120% 90% at 18% 0%, rgba(181, 140, 240, 0.30), transparent 70%),
     radial-gradient(120% 90% at 92% 100%, rgba(126, 232, 201, 0.22), transparent 70%),
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
-/* Wavy filmstrip ribbon. The viewBox is 3:1, so this scales gracefully — wider
-   on bigger cards, narrower on small ones. color (used by currentColor inside
-   the SVG) drives the strip fill so it matches the audio bars' purple. */
-.card .video-cover .film-mark { width: 75%; height: auto; color: var(--accent-2); opacity: 0.9; }
-.card .video-cover .badge {
-  font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
-  color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
+/* Oversize the strip so the rotated bounding box still fully covers the area,
+   then rotate ≈ -22°. preserveAspectRatio=none on the SVG lets us pick the
+   strip's visible thickness explicitly via height. color drives the fill. */
+.card .video-cover .film-mark {
+  position: absolute;
+  left: -25%;
+  top: 50%;
+  width: 150%;
+  height: 64px;
+  transform: translateY(-50%) rotate(-22deg);
+  color: var(--accent-2);
+  opacity: 0.9;
 }
 .card .body { padding: 1.2rem 1.4rem 1.4rem; }
 .card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 2.5rem; line-height: 1.05; font-family: 'Vujahday Script', cursive; }
