@@ -109,6 +109,7 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
       }
       footer.site a { color: var(--soft); }
       footer.site a.share-cta { color: #08111f; } /* keep the button's dark text */
+      footer.site p { margin: 0; } /* the button's own margin-top spaces it from the line */
     </style>
   </head>
   <body>
@@ -120,7 +121,8 @@ const { title = 'Celebrating Kristin', description = 'Stories, memories, and ref
     <div class="page"><slot /></div>
     <footer class="site">
       <div class="wrap">
-        <p><a class="share-cta" href="/share">Share your memories while they're fresh.</a></p>
+        <p>Share your memories while they're fresh.</p>
+        <a class="share-cta" href="/share">Share a memory</a>
       </div>
     </footer>
   </body>
