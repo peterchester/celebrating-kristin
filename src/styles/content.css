@@ -37,7 +37,7 @@
   color: var(--accent); letter-spacing: 0.04em; line-height: 1;
 }
 .card .body { padding: 1.2rem 1.4rem 1.4rem; }
-.card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 1.45rem; line-height: 1.25; }
+.card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 1.85rem; line-height: 1.05; font-family: 'Vujahday Script', cursive; }
 .card .byline {
   margin: 0 0 0.7rem; color: #6b6880;
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.85rem;

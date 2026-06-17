@@ -70,12 +70,11 @@ export function cardHTML(entry: Entry): string {
   if (hasAudio && kind !== 'audio') chips.push(`<span class="chip">♪ audio</span>`);
   const chipsHTML = chips.length ? `<p class="chips">${chips.join('')}</p>` : '';
 
-  const rel = entry.author.relationship ? `<span> · Kristin's ${esc(entry.author.relationship.toLowerCase())}</span>` : '';
   return (
     `<a class="card kind-${kind}" href="/memory/${esc(entry.id)}">${coverHTML}` +
     `<div class="body">` +
     (entry.title ? `<h2>${esc(entry.title)}</h2>` : '') +
-    `<p class="byline">${esc(entry.author.name)}${rel}</p>` +
+    `<p class="byline">${esc(entry.author.name)}</p>` +
     `${excerptHTML}${chipsHTML}` +
     `</div></a>`
   );
