@@ -259,6 +259,23 @@ const TURNSTILE_SITE_KEY =
 
     const adminToken = cookie('rk_admin');
     const owned = () => { try { return JSON.parse(cookie('rk_owner') || '[]'); } catch { return []; } };
+    let items: any[] = []; // local source of truth so new reflections show instantly
+
+    // Render from the local list — never re-fetch right after a write, since a
+    // just-written comments file is stale behind CloudFront (and briefly the dev
+    // server) for a moment.
+    function draw() {
+      listEl!.innerHTML = items.map(reflectionHTML).join('');
+      const mine = owned();
+      listEl!.querySelectorAll('.reflection').forEach((el) => {
+        const cid = el.getAttribute('data-id') || '';
+        const own = mine.find((o: any) => o.id === 'comment:' + cid);
+        if (adminToken || own) {
+          const btn = el.querySelector('.reflection-del') as HTMLButtonElement | null;
+          if (btn) { btn.hidden = false; btn.addEventListener('click', () => deleteReflection(cid, own ? own.token : null)); }
+        }
+      });
+    }
 
     async function deleteReflection(cid: string, token: string | null) {
       if (!confirm('Delete this reflection?')) return;
@@ -269,23 +286,9 @@ const TURNSTILE_SITE_KEY =
         });
         if (!r.ok) throw new Error('Could not delete.');
         if (token) forgetOwner('comment:' + cid);
-        render();
+        items = items.filter((c) => c.id !== cid);
+        draw();
       } catch (e) { alert((e as Error).message); }
-    }
-
-    async function render() {
-      let list: any[] = [];
-      try { const r = await fetch('/comments/' + encodeURIComponent(id) + '.json', { cache: 'no-store' }); if (r.ok) list = await r.json(); } catch {}
-      listEl!.innerHTML = list.map(reflectionHTML).join('');
-      const mine = owned();
-      listEl!.querySelectorAll('.reflection').forEach((el) => {
-        const cid = el.getAttribute('data-id') || '';
-        const own = mine.find((o: any) => o.id === 'comment:' + cid);
-        if (adminToken || own) {
-          const btn = el.querySelector('.reflection-del') as HTMLButtonElement | null;
-          if (btn) { btn.hidden = false; btn.addEventListener('click', () => deleteReflection(cid, own ? own.token : null)); }
-        }
-      });
     }
 
     loadProfileInto(form);
@@ -325,10 +328,12 @@ const TURNSTILE_SITE_KEY =
         const { id: cid, editToken } = await r.json();
         if (cid && editToken) rememberOwner('comment:' + cid, editToken);
         saveProfileFrom(form);
+        // Show it immediately from what we just submitted (a re-fetch would be stale).
+        items.push({ id: cid, author: payload.author, body: payload.body, media: payload.media, createdAt: new Date().toISOString() });
+        draw();
         (form.querySelector('textarea[name="body"]') as HTMLTextAreaElement).value = '';
         (form.querySelector('input[name="media"]') as HTMLInputElement).value = '';
         statusEl!.textContent = 'Thank you for adding your reflection. 🤍';
-        await render();
       } catch (err) {
         statusEl!.textContent = (err as Error).message;
       } finally {
@@ -337,7 +342,9 @@ const TURNSTILE_SITE_KEY =
       }
     });
 
-    render();
+    // Initial load (fetched once on page open).
+    try { const r = await fetch('/comments/' + encodeURIComponent(id) + '.json', { cache: 'no-store' }); if (r.ok) items = await r.json(); } catch {}
+    draw();
   }
 
   // A just-submitted memory can take a beat to become readable (CloudFront/S3
