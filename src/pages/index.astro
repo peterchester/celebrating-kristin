@@ -112,6 +112,12 @@ import Base from '../layouts/Base.astro';
     .hero-text p { max-width: none; margin-inline: auto; } /* center the lede on mobile */
   }
 
+  /* Mid widths: keep the hero block a bit narrower so it doesn't sprawl. */
+  @media (min-width: 641px) and (max-width: 1070px) {
+    .hero-text { max-width: min(82vw, 42rem); }
+    .hero-text p { max-width: 24rem; }
+  }
+
   main { padding-top: 2.5rem; max-width: 1020px; }
   .empty { text-align: center; color: var(--soft); }
 
