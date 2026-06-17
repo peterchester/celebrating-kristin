@@ -76,6 +76,13 @@ export function cardHTML(entry: Entry): string {
       `<div class="cover audio-cover" aria-hidden="true">` +
       `<svg class="wave" viewBox="0 0 120 40" preserveAspectRatio="none">${rects}</svg>` +
       `<span class="badge">♪ Audio</span></div>`;
+  } else if (kind === 'video') {
+    // Video with no poster image — generate a matching aurora cover with a big
+    // play triangle, so the card has presence (mirrors the audio treatment).
+    coverHTML =
+      `<div class="cover video-cover" aria-hidden="true">` +
+      `<svg class="play-mark" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>` +
+      `<span class="badge">▶ Video</span></div>`;
   }
 
   const chips: string[] = [];
