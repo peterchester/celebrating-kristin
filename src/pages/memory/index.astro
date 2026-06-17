@@ -51,10 +51,6 @@ const TURNSTILE_SITE_KEY =
           <input name="name" type="text" required autocomplete="name" />
         </label>
         <label>
-          How did you know Kristin?
-          <input name="relationship" type="text" placeholder="Friend, cousin, coworker…" />
-        </label>
-        <label>
           Your reflection
           <textarea name="body" rows="4" placeholder="Share a memory or a few words…"></textarea>
         </label>
@@ -229,13 +225,13 @@ const TURNSTILE_SITE_KEY =
       const c = cookie('rk_profile'); if (!c) return;
       const p = JSON.parse(c);
       const set = (n: string, v?: string) => { const el = form.querySelector('[name="' + n + '"]') as HTMLInputElement | null; if (el && v) el.value = v; };
-      set('name', p.name); set('relationship', p.relationship);
+      set('name', p.name);
     } catch {}
   }
   function saveProfileFrom(form: HTMLFormElement) {
     const fd = new FormData(form);
     let prev: any = {}; try { prev = JSON.parse(cookie('rk_profile') || '{}'); } catch {}
-    const p = { ...prev, name: String(fd.get('name') || '').trim(), relationship: String(fd.get('relationship') || '').trim() };
+    const p = { ...prev, name: String(fd.get('name') || '').trim() };
     const secure = location.protocol === 'https:' ? '; secure' : '';
     document.cookie = 'rk_profile=' + encodeURIComponent(JSON.stringify(p)) + '; path=/; max-age=' + 365 * 86400 + '; samesite=Lax' + secure;
   }
@@ -293,11 +289,8 @@ const TURNSTILE_SITE_KEY =
 
     loadProfileInto(form);
 
-    // Keep name / relationship sticky the moment they change (shared with the
-    // share form via the rk_profile cookie).
-    ['name', 'relationship'].forEach((n) => {
-      form!.querySelector(`[name="${n}"]`)?.addEventListener('change', () => saveProfileFrom(form!));
-    });
+    // Keep the name sticky the moment it changes (shared via rk_profile).
+    form!.querySelector('[name="name"]')?.addEventListener('change', () => saveProfileFrom(form!));
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -318,7 +311,7 @@ const TURNSTILE_SITE_KEY =
         }
         const payload = {
           entryId: id,
-          author: { name: String(fd.get('name') || '').trim(), relationship: String(fd.get('relationship') || '').trim() || undefined },
+          author: { name: String(fd.get('name') || '').trim() },
           body: bodyText || undefined,
           media,
           turnstileToken: turnstileToken || undefined,
@@ -459,12 +452,14 @@ const TURNSTILE_SITE_KEY =
   /* Reflections */
   .reflections { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--line); font-family: -apple-system, system-ui, sans-serif; }
   .reflections-title { font-family: 'Vujahday Script', cursive; font-weight: 400; font-size: 2.6rem; line-height: 1; margin: 0 0 1.25rem; }
-  .reflection { border-top: 1px solid var(--line); padding: 1.25rem 0; }
+  .reflection { border-top: 1px dashed var(--line); padding: 1.5rem 0; }
   .reflections-list .reflection:first-child { border-top: none; padding-top: 0; }
-  .reflection .byline { color: var(--soft); font-size: .9rem; margin: 0 0 .5rem; }
+  .reflection-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 .5rem; }
+  .reflection .byline { color: var(--soft); font-size: .9rem; margin: 0; }
   .reflection-body { font-family: Georgia, serif; }
   .reflection-body p { margin: 0 0 .8rem; }
-  .reflection-del { margin-top: .5rem; padding: .3rem .8rem; border: 1px solid rgba(255, 120, 100, .35); border-radius: 999px; background: rgba(255, 255, 255, .05); color: #ff9a8a; font: inherit; font-size: .8rem; cursor: pointer; }
+  /* Matches the memory Delete button, right-aligned with the byline. */
+  .reflection-del { flex-shrink: 0; padding: .45rem 1rem; border: 1px solid rgba(255, 120, 100, 0.35); border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: #ff9a8a; font: inherit; font-size: .9rem; cursor: pointer; }
   .reflection-del[hidden] { display: none; }
 
   .reflection-form { margin-top: 2.5rem; display: grid; gap: 1rem; }

@@ -260,7 +260,7 @@ const server = createServer(async (req, res) => {
       const commentId = randomBytes(8).toString('hex');
       const reflection = {
         id: commentId,
-        author: { name: String(s.author.name).trim(), ...(s.author.relationship ? { relationship: String(s.author.relationship).trim() } : {}) },
+        author: { name: String(s.author.name).trim() },
         ...(s.body ? { body: String(s.body).trim() } : {}),
         ...(Array.isArray(s.media) && s.media.length ? { media: s.media } : {}),
         createdAt: new Date().toISOString(),
