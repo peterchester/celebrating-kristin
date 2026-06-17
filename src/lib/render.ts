@@ -78,15 +78,21 @@ export function cardHTML(entry: Entry): string {
       `<span class="badge">♪ Audio</span></div>`;
   } else if (kind === 'video') {
     // Video with no poster image — generate a matching aurora cover with a
-    // filmstrip mark, so the card has presence (mirrors the audio treatment).
-    // The strip body is filled solid; perforations are cut out with fill-rule
-    // evenodd so the aurora gradient shows through the holes.
+    // wide filmstrip mark (mirrors the audio waveform's proportions and
+    // rounded corners). Perforations are cut via a per-card SVG mask so the
+    // aurora gradient shows through. Mask ids are scoped by entry.id.
+    const m = `fm-${esc(entry.id)}`;
+    const xs = [7, 23, 39, 55, 71, 87, 103];
+    const hole = (x: number, y: number) =>
+      `<rect x="${x}" y="${y}" width="9" height="5" rx="1.75" fill="black" />`;
+    const holes = xs.map((x) => hole(x, 4) + hole(x, 31)).join('');
     coverHTML =
       `<div class="cover video-cover" aria-hidden="true">` +
-      `<svg class="film-mark" viewBox="0 0 80 56" fill-rule="evenodd">` +
-        `<path d="M3 0 H77 A3 3 0 0 1 80 3 V53 A3 3 0 0 1 77 56 H3 A3 3 0 0 1 0 53 V3 A3 3 0 0 1 3 0 Z` +
-        `M7 6 H14 V12 H7 Z M18 6 H25 V12 H18 Z M29 6 H36 V12 H29 Z M40 6 H47 V12 H40 Z M51 6 H58 V12 H51 Z M62 6 H69 V12 H62 Z` +
-        `M7 44 H14 V50 H7 Z M18 44 H25 V50 H18 Z M29 44 H36 V50 H29 Z M40 44 H47 V50 H40 Z M51 44 H58 V50 H51 Z M62 44 H69 V50 H62 Z" />` +
+      `<svg class="film-mark" viewBox="0 0 120 40">` +
+        `<mask id="${m}">` +
+          `<rect width="120" height="40" rx="5" fill="white" />${holes}` +
+        `</mask>` +
+        `<rect width="120" height="40" rx="5" fill="currentColor" mask="url(#${m})" />` +
       `</svg>` +
       `<span class="badge">▶ Video</span></div>`;
   }
