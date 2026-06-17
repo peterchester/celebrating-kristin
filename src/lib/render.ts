@@ -77,17 +77,23 @@ export function cardHTML(entry: Entry): string {
       `<svg class="wave" viewBox="0 0 120 40" preserveAspectRatio="none">${rects}</svg>` +
       `<span class="badge">♪ Audio</span></div>`;
   } else if (kind === 'video') {
-    // Video with no poster image — generate a matching aurora cover with a big
-    // play triangle, so the card has presence (mirrors the audio treatment).
+    // Video with no poster image — generate a matching aurora cover with a
+    // filmstrip mark, so the card has presence (mirrors the audio treatment).
+    // The strip body is filled solid; perforations are cut out with fill-rule
+    // evenodd so the aurora gradient shows through the holes.
     coverHTML =
       `<div class="cover video-cover" aria-hidden="true">` +
-      `<svg class="play-mark" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>` +
+      `<svg class="film-mark" viewBox="0 0 80 56" fill-rule="evenodd">` +
+        `<path d="M3 0 H77 A3 3 0 0 1 80 3 V53 A3 3 0 0 1 77 56 H3 A3 3 0 0 1 0 53 V3 A3 3 0 0 1 3 0 Z` +
+        `M7 6 H14 V12 H7 Z M18 6 H25 V12 H18 Z M29 6 H36 V12 H29 Z M40 6 H47 V12 H40 Z M51 6 H58 V12 H51 Z M62 6 H69 V12 H62 Z` +
+        `M7 44 H14 V50 H7 Z M18 44 H25 V50 H18 Z M29 44 H36 V50 H29 Z M40 44 H47 V50 H40 Z M51 44 H58 V50 H51 Z M62 44 H69 V50 H62 Z" />` +
+      `</svg>` +
       `<span class="badge">▶ Video</span></div>`;
   }
 
   const chips: string[] = [];
   if (photoCount > 1) chips.push(`<span class="chip">◳ ${photoCount} photos</span>`);
-  if (firstVideo) chips.push(`<span class="chip">▶ video</span>`);
+  if (firstVideo && kind !== 'video') chips.push(`<span class="chip">▶ video</span>`);
   if (hasAudio && kind !== 'audio') chips.push(`<span class="chip">♪ audio</span>`);
   const chipsHTML = chips.length ? `<p class="chips">${chips.join('')}</p>` : '';
 

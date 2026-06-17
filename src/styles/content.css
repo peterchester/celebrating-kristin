@@ -50,7 +50,7 @@
     radial-gradient(120% 90% at 92% 100%, rgba(126, 232, 201, 0.22), transparent 70%),
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
-.card .video-cover .play-mark { width: 56px; height: 56px; fill: var(--accent-2); opacity: 0.9; }
+.card .video-cover .film-mark { width: 80px; height: 56px; fill: var(--accent-2); opacity: 0.9; }
 .card .video-cover .badge {
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
   color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
