@@ -5,10 +5,10 @@ interface Props {
   description?: string;
 }
 const { title = 'Celebrating Kristin', description = 'Stories, memories, and reflections.' } = Astro.props;
-// The footer is just the "Share a memory" CTA — hide it on the share page and on
-// single memory pages (which already have their own nav).
+// Keep the footer (its gradient) everywhere, but drop the "Share a memory"
+// button on the share page and on single memory pages (which have their own nav).
 const fp = Astro.url.pathname.replace(/\/$/, '');
-const hideFooter = fp === '/share' || fp === '/memory';
+const hideShareButton = fp === '/share' || fp === '/memory';
 ---
 
 <!doctype html>
@@ -122,12 +122,10 @@ const hideFooter = fp === '/share' || fp === '/memory';
     </video>
     <div class="bg-overlay" aria-hidden="true"></div>
     <div class="page"><slot /></div>
-    {!hideFooter && (
-      <footer class="site">
-        <div class="wrap">
-          <a class="share-cta" href="/share">Share a memory</a>
-        </div>
-      </footer>
-    )}
+    <footer class="site">
+      <div class="wrap">
+        {!hideShareButton && <a class="share-cta" href="/share">Share a memory</a>}
+      </div>
+    </footer>
   </body>
 </html>
