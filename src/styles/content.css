@@ -101,6 +101,9 @@
   max-width: var(--maxw); margin: 0.7rem auto 0; padding: 0 1.25rem;
 }
 .entry { padding-top: clamp(3rem, 6vw, 5rem); }
+/* No banner: the title would otherwise sit right against the top edge, so give
+   it considerably more breathing room. */
+.entry.no-banner { padding-top: clamp(5rem, 12vw, 9rem); }
 .entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 0.4rem; }
 .entry .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: 0.95rem; margin: 0 0 2rem; }
 .entry .byline strong { color: var(--ink); font-weight: 600; }
