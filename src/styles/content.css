@@ -37,11 +37,7 @@
 /* Width drives size; height comes from the SVG's 3:1 viewBox, with a max so the
    wave stays within the audio cover on wider cards. */
 .card .wave { width: 60%; height: auto; max-height: 80px; }
-.card .wave rect { fill: var(--accent-2); opacity: 0.85; }
-.card .audio-cover .badge {
-  font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
-  color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;
-}
+.card .wave rect { fill: var(--accent-2); opacity: 0.55; }
 /* Posterless-video card: an aurora background with a diagonal filmstrip
    running across it, cropped to the cover bounds. */
 .card .video-cover {
@@ -64,7 +60,7 @@
   height: auto;
   transform: translateY(-50%) rotate(-22deg);
   color: var(--accent-2);
-  opacity: 0.9;
+  opacity: 0.6;
 }
 .card .body { padding: 1.2rem 1.4rem 1.4rem; }
 .card h2 { margin: 0 0 0.3rem; font-weight: 400; font-size: 2.5rem; line-height: 1.05; font-family: 'Vujahday Script', cursive; }

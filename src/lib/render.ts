@@ -74,8 +74,7 @@ export function cardHTML(entry: Entry): string {
       .join('');
     coverHTML =
       `<div class="cover audio-cover" aria-hidden="true">` +
-      `<svg class="wave" viewBox="0 0 120 40">${rects}</svg>` +
-      `<span class="badge">♪ Audio</span></div>`;
+      `<svg class="wave" viewBox="0 0 120 40">${rects}</svg></div>`;
   } else if (kind === 'video') {
     // Posterless-video cover: a flat horizontal filmstrip (body + perforations
     // + frame windows) cut via mask, then rotated and oversized so it fills the
