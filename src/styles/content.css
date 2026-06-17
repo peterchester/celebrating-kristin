@@ -50,11 +50,10 @@
     radial-gradient(120% 90% at 92% 100%, rgba(126, 232, 201, 0.22), transparent 70%),
     linear-gradient(150deg, #1a1140 0%, #141b3e 55%, #0c2436 100%);
 }
-/* Wider filmstrip with rounded corners + rounded perforations, sized close to
-   the audio waveform so the two covers read as a family. color (via
-   currentColor inside the SVG) drives the strip fill so it matches the audio
-   bars' purple. */
-.card .video-cover .film-mark { width: 60%; height: auto; color: var(--accent-2); opacity: 0.85; }
+/* Wavy filmstrip ribbon. The viewBox is 3:1, so this scales gracefully — wider
+   on bigger cards, narrower on small ones. color (used by currentColor inside
+   the SVG) drives the strip fill so it matches the audio bars' purple. */
+.card .video-cover .film-mark { width: 75%; height: auto; color: var(--accent-2); opacity: 0.9; }
 .card .video-cover .badge {
   font-family: -apple-system, system-ui, sans-serif; font-size: 0.8rem;
   color: var(--accent-2); letter-spacing: 0.04em; line-height: 1;

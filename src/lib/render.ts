@@ -77,22 +77,27 @@ export function cardHTML(entry: Entry): string {
       `<svg class="wave" viewBox="0 0 120 40" preserveAspectRatio="none">${rects}</svg>` +
       `<span class="badge">♪ Audio</span></div>`;
   } else if (kind === 'video') {
-    // Video with no poster image — generate a matching aurora cover with a
-    // wide filmstrip mark (mirrors the audio waveform's proportions and
-    // rounded corners). Perforations are cut via a per-card SVG mask so the
-    // aurora gradient shows through. Mask ids are scoped by entry.id.
+    // Video with no poster image — a wavy filmstrip ribbon. The body is a
+    // closed bezier (top edge wave + bottom edge wave traced back). Perforations
+    // are dashed strokes through a per-card mask, so they follow the wave and
+    // the aurora gradient shows through the holes. Mask ids scoped by entry.id.
     const m = `fm-${esc(entry.id)}`;
-    const xs = [7, 23, 39, 55, 71, 87, 103];
-    const hole = (x: number, y: number) =>
-      `<rect x="${x}" y="${y}" width="9" height="5" rx="1.75" fill="black" />`;
-    const holes = xs.map((x) => hole(x, 4) + hole(x, 31)).join('');
+    // Top edge of the strip (two full waves across viewBox 240×80).
+    const topEdge = 'M0,30 C15,10 45,10 60,30 S105,50 120,30 S165,10 180,30 S225,50 240,30';
+    // Bottom edge traced right→left, offset by +20 (parallel curve, same shape).
+    const bottomBack = 'L240,50 C225,70 195,70 180,50 C165,30 135,30 120,50 C105,70 75,70 60,50 C45,30 15,30 0,50 Z';
+    const body = topEdge + ' ' + bottomBack;
+    const perfTop = 'M0,34 C15,14 45,14 60,34 S105,54 120,34 S165,14 180,34 S225,54 240,34';
+    const perfBot = 'M0,46 C15,26 45,26 60,46 S105,66 120,46 S165,26 180,46 S225,66 240,46';
     coverHTML =
       `<div class="cover video-cover" aria-hidden="true">` +
-      `<svg class="film-mark" viewBox="0 0 120 40">` +
+      `<svg class="film-mark" viewBox="0 0 240 80">` +
         `<mask id="${m}">` +
-          `<rect width="120" height="40" rx="5" fill="white" />${holes}` +
+          `<path d="${body}" fill="white" />` +
+          `<path d="${perfTop}" stroke="black" stroke-width="4" stroke-dasharray="6 6" fill="none" />` +
+          `<path d="${perfBot}" stroke="black" stroke-width="4" stroke-dasharray="6 6" fill="none" />` +
         `</mask>` +
-        `<rect width="120" height="40" rx="5" fill="currentColor" mask="url(#${m})" />` +
+        `<path d="${body}" fill="currentColor" mask="url(#${m})" />` +
       `</svg>` +
       `<span class="badge">▶ Video</span></div>`;
   }
