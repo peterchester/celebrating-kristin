@@ -185,10 +185,7 @@ import Base from '../../layouts/Base.astro';
     } catch { return showNotFound(); }
 
     document.title = (entry.title ? entry.title : 'A memory from ' + (entry.author?.name || 'a friend')) + ' — Celebrating Kristin';
-    const bannerMarkup = bannerHTML(entry);
-    if (bannerEl) bannerEl.innerHTML = bannerMarkup;
-    // No banner → the title would sit against the top edge; flag for extra room.
-    if (!bannerMarkup) document.querySelector('main.entry')?.classList.add('no-banner');
+    if (bannerEl) bannerEl.innerHTML = bannerHTML(entry);
     if (contentEl) contentEl.innerHTML = postContentHTML(entry);
 
     setupNav(id);
