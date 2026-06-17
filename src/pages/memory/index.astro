@@ -221,6 +221,9 @@ import Base from '../../layouts/Base.astro';
   .owner-tools button.danger { color: #ff9a8a; border-color: rgba(255, 120, 100, 0.35); }
   .owner-tools button.ghost { color: var(--soft); }
   #ot-form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  /* #ot-form (an id) outranks the UA [hidden] rule, so hidden was ignored.
+     This restores it: the form stays hidden until the Edit button toggles it. */
+  #ot-form[hidden] { display: none; }
   #ot-form label { display: grid; gap: .35rem; font-size: .9rem; }
   #ot-form input, #ot-form textarea { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; background: rgba(255, 255, 255, 0.05); color: var(--ink); }
   #ot-form textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
