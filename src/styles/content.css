@@ -54,9 +54,9 @@
    frames keep their proportions at every card width. color drives the fill. */
 .card .video-cover .film-mark {
   position: absolute;
-  left: -25%;
+  left: -10%;
   top: 50%;
-  width: 150%;
+  width: 120%;
   height: auto;
   transform: translateY(-50%) rotate(-22deg);
   color: var(--accent-2);
