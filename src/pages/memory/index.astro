@@ -153,7 +153,7 @@ const TURNSTILE_SITE_KEY =
     const fld = (n: string) => form.querySelector('[name="' + n + '"]') as HTMLInputElement;
 
     (document.getElementById('ot-label') as HTMLElement).textContent = ownerToken
-      ? 'This is your memory — you can edit or remove it.'
+      ? 'This is your memory so you can edit or remove it.'
       : 'Admin controls.';
     fld('title').value = entry.title || '';
     fld('memoryDate').value = entry.memoryDate || '';
@@ -387,7 +387,14 @@ const TURNSTILE_SITE_KEY =
 
 <style>
   .owner-tools { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px dashed var(--line); font-family: -apple-system, system-ui, sans-serif; }
-  .ot-bar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+  /* Faint translucent panel so the owner row reads as "yours" without being loud. */
+  .ot-bar {
+    display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between;
+    padding: .8rem 1rem;
+    background: rgba(180, 200, 255, 0.06);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
   .ot-label { color: var(--soft); font-size: .9rem; }
   .ot-actions { display: flex; gap: .5rem; }
   .owner-tools button {
