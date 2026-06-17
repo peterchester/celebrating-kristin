@@ -69,13 +69,18 @@
 
 /* ── Single-post body ─────────────────────────────────────────────────────── */
 .post-banner { width: 100%; line-height: 0; }
+/* Show the whole image at its natural proportions (uncropped) by default.
+   The large max-height only kicks in once the proportional height gets very
+   tall — e.g. a portrait image on a wide screen — and then it's cropped to the
+   cap (centered) rather than distorted. Typical phone-width heights never reach
+   it, so mobile is unaffected. Adjust the 1100px to taste. */
 .post-banner img, .post-banner video {
-  display: block; width: 100%; height: clamp(280px, 52vh, 560px); object-fit: cover;
-}
-/* On wide screens grow the banner with the viewport width, so it stays a
-   proper banner instead of a short letterbox strip. */
-@media (min-width: 1021px) {
-  .post-banner img, .post-banner video { height: clamp(480px, 42vw, 760px); }
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 1100px;
+  object-fit: cover;
+  object-position: center;
 }
 .banner-caption {
   line-height: 1.5; text-align: center; color: var(--soft); font-style: italic;
