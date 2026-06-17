@@ -63,24 +63,37 @@
 
 /* ── Media attachment ─────────────────────────────────────────────────────── */
 .media { margin: 1.5rem 0; }
-.media img, .media video { width: 100%; height: auto; border-radius: 6px; display: block; }
+.media img { width: 100%; height: auto; border-radius: 6px; display: block; }
+/* Inline videos: natural aspect, centered, height-capped so portrait clips
+   don't run off the screen. */
+.media video {
+  display: block; margin: 0 auto;
+  max-width: 100%; max-height: 85vh; height: auto; border-radius: 6px;
+}
 .media audio { width: 100%; }
 .media figcaption { color: var(--soft); font-size: 0.9rem; font-style: italic; margin-top: 0.5rem; text-align: center; }
 
 /* ── Single-post body ─────────────────────────────────────────────────────── */
 .post-banner { width: 100%; line-height: 0; }
-/* Show the whole image at its natural proportions (uncropped) by default.
-   The large max-height only kicks in once the proportional height gets very
-   tall — e.g. a portrait image on a wide screen — and then it's cropped to the
-   cap (centered) rather than distorted. Typical phone-width heights never reach
-   it, so mobile is unaffected. Adjust the 1100px to taste. */
-.post-banner img, .post-banner video {
+/* Images: show the whole image at natural proportions; a large max-height only
+   crops (centered) very tall ones on wide screens. Mobile never reaches it. */
+.post-banner img {
   display: block;
   width: 100%;
   height: auto;
   max-height: 1100px;
   object-fit: cover;
   object-position: center;
+}
+/* Videos: never crop (cropping also breaks fullscreen). Play at natural aspect,
+   centered; tall/portrait clips are capped to the viewport height with the page
+   showing behind them, while wide clips fill the width. */
+.post-banner video {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 85vh;
+  height: auto;
 }
 .banner-caption {
   line-height: 1.5; text-align: center; color: var(--soft); font-style: italic;
