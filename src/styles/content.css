@@ -104,7 +104,7 @@
    Uses .wrap.entry (two classes) so it outranks the global `.wrap { padding }`
    shorthand, which would otherwise reset padding-top to 0. */
 .wrap.entry { padding-top: 2.5rem; }
-.entry h1 { font-weight: 400; font-size: 2.2rem; margin: 0 0 0.4rem; }
+.entry h1 { font-weight: 400; font-size: 3.85rem; margin: 0 0 0.4rem; }
 .entry .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: 0.95rem; margin: 0 0 2rem; }
 .entry .byline strong { color: var(--ink); font-weight: 600; }
 .entry article p { margin: 0 0 1.3rem; }
