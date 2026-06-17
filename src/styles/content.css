@@ -117,7 +117,7 @@
    These elements are created by JS (innerHTML) on the memory page, so they
    never receive Astro's scoped-style attribute. Keep their styling global. */
 .reflection { border-top: 1px dashed rgba(180, 200, 255, 0.32); padding: 1.5rem 0; }
-.reflections-list .reflection:first-child { border-top: none; padding-top: 0; }
+.reflections-list .reflection:last-child { border-bottom: 1px dashed rgba(180, 200, 255, 0.32); }
 .reflection-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 0 .5rem; }
 .reflection .byline { color: var(--soft); font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin: 0; }
 .reflection-body { font-family: Georgia, serif; }
