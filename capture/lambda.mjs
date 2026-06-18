@@ -53,7 +53,8 @@ const slug = (s) =>
     .replace(/[\s_]+/g, '-').slice(0, 40) || 'anon';
 const sha = (t) => createHash('sha256').update(String(t)).digest('hex');
 const eq = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
+const ADMIN_HASH = ADMIN ? sha(ADMIN) : '';
+const isAdmin = (t) => !!ADMIN_HASH && typeof t === 'string' && eq(t, ADMIN_HASH);
 const safeId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
 
 // ── S3 helpers ───────────────────────────────────────────────────────────────

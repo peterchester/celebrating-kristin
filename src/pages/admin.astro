@@ -43,11 +43,17 @@ import Base from '../layouts/Base.astro';
   const refresh = () => { state.textContent = has() ? 'Admin mode is ON on this device.' : 'Admin mode is off.'; };
   refresh();
 
-  form.addEventListener('submit', (e) => {
+  async function sha256hex(text: string): Promise<string> {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const t = tokenInput.value.trim();
     if (!t) return;
-    document.cookie = `rk_admin=${encodeURIComponent(t)}; path=/; max-age=${30 * 86400}; samesite=Lax${secure}`;
+    const hash = await sha256hex(t);
+    document.cookie = `rk_admin=${encodeURIComponent(hash)}; path=/; max-age=${30 * 86400}; samesite=Lax${secure}`;
     form.reset();
     state.textContent = 'Saved. Open any memory to edit or delete it.';
   });

@@ -93,7 +93,8 @@ const saveTokens = async (o) => {
   await mkdir(PRIVATE, { recursive: true });
   await writeFile(TOKENS, JSON.stringify(o, null, 2) + '\n');
 };
-const isAdmin = (t) => !!ADMIN && typeof t === 'string' && eq(t, ADMIN);
+const ADMIN_HASH = ADMIN ? sha(ADMIN) : '';
+const isAdmin = (t) => !!ADMIN_HASH && typeof t === 'string' && eq(t, ADMIN_HASH);
 
 // Verify a Cloudflare Turnstile token server-side. Skipped if no secret is set.
 const verifyTurnstile = async (token, ip) => {
