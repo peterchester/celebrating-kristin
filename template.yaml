@@ -31,6 +31,14 @@ Parameters:
     Type: String
     Default: ''
     Description: Public site URL for links in notification emails (e.g. https://celebrate.kristinallen.com).
+  EmailAddress:
+    Type: String
+    Default: celebrate@kristinallen.com
+    Description: Inbound address. Fresh emails become new memories; replies to notifications (subject has [ref:id]) become reflections.
+  AllowSenders:
+    Type: String
+    Default: ''
+    Description: Optional comma-separated sender allowlist for inbound email. Blank accepts anyone (SES spam/virus scan still applies).
 
 Resources:
 
@@ -61,6 +69,7 @@ Resources:
           TURNSTILE_SECRET: !Ref TurnstileSecret
           NOTIFY_FROM: !Ref NotifyFrom
           SITE_URL: !Ref SiteUrl
+          EMAIL_ADDRESS: !Ref EmailAddress
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -81,6 +90,107 @@ Resources:
               Action: [ses:SendEmail, ses:SendRawEmail]
               Resource: '*'
 
+  # ── Inbound email (SES) ──────────────────────────────────────────────────────
+  # Raw incoming emails land here (private, auto-expired). SES needs PutObject.
+  InboundBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-raw-email
+            Status: Enabled
+            ExpirationInDays: 90
+
+  InboundBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref InboundBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSESPut
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub '${InboundBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+
+  EmailFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: celebrate-kristin-email
+      Runtime: nodejs20.x
+      Handler: handler.handler
+      CodeUri: capture/email/
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          SITE_BUCKET: !Ref SiteBucketName
+          PRIVATE_BUCKET: !Ref PrivateBucket
+          RAW_BUCKET: !Ref InboundBucket
+          RAW_PREFIX: inbound/
+          EMAIL_ADDRESS: !Ref EmailAddress
+          ALLOW_SENDERS: !Ref AllowSenders
+          NOTIFY_FROM: !Ref NotifyFrom
+          SITE_URL: !Ref SiteUrl
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref SiteBucketName
+        - S3CrudPolicy:
+            BucketName: !Ref PrivateBucket
+        - S3ReadPolicy:
+            BucketName: !Ref InboundBucket
+        - Statement:
+            - Effect: Allow
+              Action: [ses:SendEmail, ses:SendRawEmail]
+              Resource: '*'
+
+  # Let SES invoke the email function.
+  EmailFnSesInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref EmailFn
+      Action: lambda:InvokeFunction
+      Principal: ses.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+
+  # Receipt rule set + rule. NOTE: CloudFormation cannot mark a rule set ACTIVE;
+  # run once after deploy:  aws ses set-active-receipt-rule-set \
+  #   --rule-set-name celebrate-kristin --region us-east-1
+  InboundRuleSet:
+    Type: AWS::SES::ReceiptRuleSet
+    Properties:
+      RuleSetName: celebrate-kristin
+
+  InboundRule:
+    Type: AWS::SES::ReceiptRule
+    DependsOn: [InboundBucketPolicy, EmailFnSesInvoke]
+    Properties:
+      RuleSetName: !Ref InboundRuleSet
+      Rule:
+        Name: celebrate-inbound
+        Enabled: true
+        ScanEnabled: true
+        TlsPolicy: Optional
+        Recipients:
+          - !Ref EmailAddress
+        Actions:
+          - S3Action:
+              BucketName: !Ref InboundBucket
+              ObjectKeyPrefix: inbound/
+          - LambdaAction:
+              FunctionArn: !GetAtt EmailFn.Arn
+              InvocationType: Event
+
 Outputs:
   FunctionUrl:
     Description: Base URL of the capture function (append /presign, /submit, etc.)
@@ -88,3 +198,9 @@ Outputs:
   PrivateBucket:
     Description: Private bucket holding token hashes + contact emails
     Value: !Ref PrivateBucket
+  InboundBucket:
+    Description: Bucket where SES stores raw inbound emails
+    Value: !Ref InboundBucket
+  ReceiptRuleSetName:
+    Description: Activate this after deploy with `aws ses set-active-receipt-rule-set`
+    Value: !Ref InboundRuleSet

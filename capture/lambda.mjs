@@ -33,6 +33,7 @@ const ADMIN = process.env.ADMIN_TOKEN || '';   // optional admin override
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''; // optional captcha
 const NOTIFY_FROM = process.env.NOTIFY_FROM || '';          // SES sender; blank = no emails
 const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, ''); // for links in emails
+const EMAIL_ADDRESS = process.env.EMAIL_ADDRESS || '';      // inbound address for reply-to (reply = reflection)
 
 const ENTRIES = 'entries/';        // entries/<id>.json  (public)
 const COMMENTS = 'comments/';      // comments/<entryId>.json — array of reflections (public)
@@ -171,16 +172,21 @@ async function notifyAuthor(entryId, reflectorName) {
   const entry = await getJson(SITE, `${ENTRIES}${entryId}.json`, null);
   const title = entry?.title || 'your memory';
   const link = SITE_URL ? `${SITE_URL}/memory/${entryId}` : '';
+  const canReply = !!EMAIL_ADDRESS;
   const body =
     `Hi ${to.name || ''},\n\n` +
     `${reflectorName} just added a reflection to "${title}" on Celebrating Kristin.\n\n` +
     (link ? `Read it here:\n${link}\n\n` : '') +
+    (canReply ? `You can reply to this email to add your own reflection.\n\n` : '') +
     `With love,\nCelebrating Kristin`;
+  // The [ref:<id>] tag lets a reply be routed back to this memory as a reflection.
+  const subject = `${reflectorName} added a reflection to "${title}"` + (canReply ? ` [ref:${entryId}]` : '');
   await ses.send(new SendEmailCommand({
     Source: NOTIFY_FROM,
     Destination: { ToAddresses: [to.email] },
+    ...(canReply ? { ReplyToAddresses: [EMAIL_ADDRESS] } : {}),
     Message: {
-      Subject: { Data: `${reflectorName} added a reflection to "${title}"` },
+      Subject: { Data: subject },
       Body: { Text: { Data: body } },
     },
   }));
