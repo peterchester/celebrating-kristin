@@ -37,30 +37,85 @@ import Base from '../layouts/Base.astro';
   const form = document.getElementById('admin-form') as HTMLFormElement;
   const state = document.getElementById('state')!;
   const tokenInput = form.querySelector('[name="token"]') as HTMLInputElement;
-  const has = () => document.cookie.split('; ').some((c) => c.startsWith('rk_admin='));
+  const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
   const secure = location.protocol === 'https:' ? '; secure' : '';
 
-  const refresh = () => { state.textContent = has() ? 'Admin mode is ON on this device.' : 'Admin mode is off.'; };
-  refresh();
+  // Same API-base derivation the memory page uses, so token checks hit the
+  // capture backend (localhost:8787 in dev, the Function URL in prod).
+  const SUBMIT = import.meta.env.PUBLIC_SUBMIT_API || '';
+  const API_BASE =
+    import.meta.env.PUBLIC_API_BASE ||
+    (SUBMIT ? SUBMIT.replace(/\/submit$/, '') : (import.meta.env.DEV ? 'http://localhost:8787' : ''));
 
+  const cookie = (k: string) => {
+    const m = document.cookie.split('; ').find((c) => c.startsWith(k + '='));
+    return m ? decodeURIComponent(m.slice(k.length + 1)) : null;
+  };
+
+  // The cookie never holds the raw token — only its SHA-256 hash. The backend
+  // stores hash(ADMIN_TOKEN) and compares hashes, so the raw token is never sent
+  // over the wire or persisted in the browser.
   async function sha256hex(text: string): Promise<string> {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
+  const saveHash = (hash: string) => {
+    document.cookie = `rk_admin=${encodeURIComponent(hash)}; path=/; max-age=${30 * 86400}; samesite=Lax${secure}`;
+  };
+
+  // Ask the backend whether a token HASH is THE admin token's hash.
+  // true = valid, false = rejected (403), null = couldn't reach the backend.
+  async function check(hash: string): Promise<boolean | null> {
+    if (!API_BASE) return null;
+    try {
+      const r = await fetch(API_BASE + '/admin-check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ adminToken: hash }),
+      });
+      if (r.ok) return true;
+      if (r.status === 403) return false;
+      return null;
+    } catch { return null; }
+  }
+
+  // On load, report the REAL status of any saved token (not just "a cookie
+  // exists"). The cookie already holds the hash, so check it directly.
+  (async () => {
+    const existing = cookie('rk_admin');
+    if (!existing) { state.textContent = 'Admin mode is off.'; return; }
+    const ok = await check(existing);
+    state.textContent =
+      ok === true ? 'Admin mode is ON on this device.'
+      : ok === false ? 'The saved admin token is not valid — re-enter it below.'
+      : 'Admin token saved (couldn’t reach the backend to verify it).';
+  })();
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const t = tokenInput.value.trim();
     if (!t) return;
+    submitBtn.disabled = true;
+    state.textContent = 'Checking…';
     const hash = await sha256hex(t);
-    document.cookie = `rk_admin=${encodeURIComponent(hash)}; path=/; max-age=${30 * 86400}; samesite=Lax${secure}`;
+    const ok = await check(hash);
+    if (ok === false) {
+      state.textContent = 'That token isn’t correct — nothing was saved.';
+      submitBtn.disabled = false;
+      return;
+    }
+    saveHash(hash);
     form.reset();
-    state.textContent = 'Saved. Open any memory to edit or delete it.';
+    state.textContent =
+      ok === true
+        ? 'Verified and saved. Open any memory to edit or delete it.'
+        : 'Saved, but couldn’t reach the backend to verify it. Open a memory to test.';
+    submitBtn.disabled = false;
   });
 
   document.getElementById('clear')!.addEventListener('click', () => {
     document.cookie = 'rk_admin=; path=/; max-age=0';
-    refresh();
+    state.textContent = 'Admin mode is off.';
   });
 </script>
 

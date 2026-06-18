@@ -206,6 +206,15 @@ export const handler = async (event) => {
   }
 
   try {
+    // Lets the /admin page confirm a token is valid before saving it (and reject
+    // a wrong one), instead of the user only finding out when an edit/delete
+    // later 403s. Reveals nothing a /delete attempt wouldn't, and the compare is
+    // constant-time. Note: this is an unauthenticated validity oracle — fine
+    // given the token's entropy, but don't shorten the token.
+    if (method === 'POST' && path === '/admin-check') {
+      return isAdmin(s.adminToken) ? json(200, { ok: true }) : json(403, { error: 'not allowed' });
+    }
+
     if (method === 'POST' && path === '/presign') {
       const { filename, contentType, kind } = s;
       const rand = randomBytes(3).toString('hex');

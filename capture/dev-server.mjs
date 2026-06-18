@@ -152,6 +152,11 @@ const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, '');
 
   try {
+    if (req.method === 'POST' && url.pathname === '/admin-check') {
+      const { adminToken } = JSON.parse((await readBody(req)).toString() || '{}');
+      return isAdmin(adminToken) ? send(res, 200, { ok: true }) : send(res, 403, { error: 'not allowed' });
+    }
+
     if (req.method === 'POST' && url.pathname === '/presign') {
       const { filename, contentType, kind } = JSON.parse((await readBody(req)).toString() || '{}');
       const rand = Math.random().toString(36).slice(2, 8);
