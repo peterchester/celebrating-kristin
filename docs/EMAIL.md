@@ -11,6 +11,8 @@ Let people contribute by email. Send to **celebrate@kristinallen.com**:
 Spam/virus mail (per SES's scan) is dropped. An optional `AllowSenders`
 allowlist can restrict who may contribute.
 
+This feature is part of `main` — no special branch to check out.
+
 ## How it works
 
 ```
@@ -40,18 +42,27 @@ to SES. SES only acts on addresses your rule matches (`celebrate@`); mail to any
   `celebrate@mail.kristinallen.com`, verify that subdomain in SES, and put the
   MX on `mail.kristinallen.com`. (Change the `EmailAddress` param accordingly.)
 
-## One-time setup
+## Setup
 
 All in **us-east-1** (SES inbound is region-specific; this matches the rest).
+Run the deploy commands from the project on the machine that has the AWS CLI,
+SAM CLI, Node, and your `.deploy.env`.
 
 **1. Verify the domain in SES** (same identity used for outbound notifications).
-If you set up notification emails already, this is done. Otherwise: SES →
-Verified identities → create the domain identity, publish DKIM to Route 53.
+If you set up notification emails already, this is done. Otherwise: SES console
+→ Verified identities → create the domain identity → publish DKIM to Route 53
+(one click, since the domain is in Route 53).
 
-**2. Deploy the backend.** `mailparser` is a real dependency now, so you must
-`sam build` before deploy:
+**2. Get the latest code:**
 ```bash
-read -r ADMIN_TOKEN
+git checkout main && git pull
+```
+
+**3. Build + deploy the backend.** `mailparser` is a real dependency now, so you
+must `sam build` before deploying (earlier deploys skipped it because there were
+no dependencies):
+```bash
+read -r ADMIN_TOKEN          # paste your admin token
 sam build
 sam deploy --stack-name celebrate-kristin-backend --region us-east-1 --resolve-s3 \
   --capabilities=CAPABILITY_IAM \
@@ -64,20 +75,24 @@ sam deploy --stack-name celebrate-kristin-backend --region us-east-1 --resolve-s
     EmailAddress=celebrate@kristinallen.com
 ```
 This creates the inbound bucket, the email Lambda, and the receipt rule set/rule.
+(If your Turnstile secret was set on a previous deploy, re-add `TurnstileSecret=…`
+here too — unspecified NoEcho params can otherwise reset.)
 
-**3. Activate the receipt rule set** (CloudFormation can't do this):
+**4. Activate the receipt rule set** (CloudFormation can't do this):
 ```bash
 aws ses set-active-receipt-rule-set --rule-set-name celebrate-kristin --region us-east-1
 ```
-(Only one rule set is active per account/region — this replaces any existing one.)
+Only one rule set is active per account/region — this replaces any existing one.
 
-**4. Add the MX record** (see the DNS decision above). For the apex in Route 53:
+**5. Add the MX record** (see the DNS decision above). In Route 53 for the apex:
 - Name: `kristinallen.com` (or your subdomain), Type: `MX`,
   Value: `10 inbound-smtp.us-east-1.amazonaws.com`
 
-**5. Production access.** Receiving works in the SES sandbox, but *sending*
-notifications to arbitrary contributors needs SES production access (the same
-request as for outbound notifications).
+**6. Production access.** Receiving works in the SES sandbox, but *sending*
+notifications/replies to arbitrary contributors needs SES production access (the
+same request as for outbound notifications).
+
+No front-end deploy is needed — this is all backend.
 
 ## Test
 
@@ -85,6 +100,15 @@ request as for outbound notifications).
   appear within a few seconds. (Watch CloudWatch logs for `celebrate-kristin-email`.)
 - Reply to a reflection-notification email → a reflection should appear on that
   memory.
+
+## Re-deploying later
+
+Any change to `capture/email/` or `capture/lambda.mjs`:
+```bash
+sam build && sam deploy --stack-name celebrate-kristin-backend --region us-east-1 \
+  --resolve-s3 --capabilities=CAPABILITY_IAM --parameter-overrides … (same as above)
+```
+The MX record and rule-set activation are one-time — no need to repeat them.
 
 ## Notes / limitations (first cut)
 
