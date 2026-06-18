@@ -16,7 +16,11 @@
   overflow: hidden;
   transition: box-shadow 0.18s ease;
 }
-.card:hover { box-shadow: 0 6px 34px var(--glow); position: relative; z-index: 1; }
+/* No `position: relative` here. In Safari, a card inside the CSS-columns masonry
+   that has BOTH `position: relative` and a `box-shadow` blanks out on hover
+   (WebKit column-repaint bug). z-index turned out to be irrelevant, so the
+   positioning bought us nothing worth keeping — drop it and keep the glow. */
+.card:hover { box-shadow: 0 6px 34px var(--glow); }
 .card .cover { position: relative; line-height: 0; background: transparent; }
 .card .cover img { width: 100%; height: auto; display: block; }
 .card .play {
