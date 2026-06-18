@@ -9,7 +9,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "deploy-frontend": "./deploy.sh",
-    "deploy-backend": "sam deploy --stack-name celebrate-kristin-backend --region us-east-1 --resolve-s3 --capabilities=CAPABILITY_IAM --parameter-overrides SiteBucketName=celebrate-kristinallen-com AllowOrigin=https://celebrate.kristinallen.com \"AdminToken={$ADMIN_TOKEN}\"",
+    "deploy-backend": "./deploy-backend.sh",
     "deploy-all": "npm run deploy-frontend && npm run deploy-backend"
   },
   "dependencies": {
