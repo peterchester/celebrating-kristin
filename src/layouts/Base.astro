@@ -116,11 +116,39 @@ const hideShareButton = fp === '/share' || fp === '/memory';
     </style>
   </head>
   <body>
-    <video class="bg-video" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+    <video class="bg-video" autoplay muted loop playsinline webkit-playsinline preload="auto" aria-hidden="true">
       <source src="/img/background.webm" type="video/webm" />
       <source src="/img/background.mp4" type="video/mp4" />
     </video>
     <div class="bg-overlay" aria-hidden="true"></div>
+    <script>
+      // iOS/iPadOS Safari doesn't reliably honor the `muted`+`autoplay`
+      // attributes for inline autoplay, and paints a faint play-button glyph
+      // over any <video> that isn't playing — visible here through the content
+      // since the video sits at z-index:-2. Force play from JS (WebKit needs
+      // `muted` set on the property, not just the attribute). If it still can't
+      // start — Low Power Mode, an unsupported codec — hide the element so only
+      // the body's aurora gradient shows (no glyph), and try once more on the
+      // first touch, revealing it again if that succeeds.
+      const v = document.querySelector('.bg-video');
+      if (v instanceof HTMLVideoElement) {
+        v.muted = true;
+        v.playsInline = true;
+        const hide = () => { v.style.display = 'none'; };
+        const playOnGesture = () => {
+          const retry = () => { v.style.display = ''; v.play().catch(hide); };
+          window.addEventListener('touchstart', retry, { once: true, passive: true });
+          window.addEventListener('pointerdown', retry, { once: true });
+        };
+        const tryPlay = () => {
+          const p = v.play();
+          if (p && typeof p.then === 'function') p.catch(() => { hide(); playOnGesture(); });
+        };
+        v.addEventListener('error', hide);
+        if (v.readyState >= 2) tryPlay();
+        else v.addEventListener('loadeddata', tryPlay, { once: true });
+      }
+    </script>
     <div class="page"><slot /></div>
     <footer class="site">
       <div class="wrap">
