@@ -242,7 +242,7 @@ const server = createServer(async (req, res) => {
       try { entry = JSON.parse(await readFile(file, 'utf8')); } catch {}
       await unlink(file).catch(() => {});
       for (const m of entry?.media ?? []) { // remove this entry's uploaded media too
-        for (const src of [m.src, m.original]) {
+        for (const src of [m.src, m.original, m.poster]) {
           const mp = safeMediaPath(src);
           if (mp) await unlink(mp).catch(() => {});
         }
@@ -303,7 +303,7 @@ const server = createServer(async (req, res) => {
       const gone = list.find((c) => c.id === commentId);
       await writeFile(file, JSON.stringify(list.filter((c) => c.id !== commentId), null, 2) + '\n');
       for (const m of gone?.media ?? []) {
-        for (const src of [m.src, m.original]) { const mp = safeMediaPath(src); if (mp) await unlink(mp).catch(() => {}); }
+        for (const src of [m.src, m.original, m.poster]) { const mp = safeMediaPath(src); if (mp) await unlink(mp).catch(() => {}); }
       }
       const tokens = await loadTokens(); delete tokens[`comment:${commentId}`]; await saveTokens(tokens);
       console.log(`✗ deleted reflection ${commentId}`);

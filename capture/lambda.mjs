@@ -290,7 +290,7 @@ export const handler = async (event) => {
       const entry = await getJson(SITE, `${ENTRIES}${id}.json`, null);
       await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: `${ENTRIES}${id}.json` })).catch(() => {});
       for (const m of entry?.media ?? []) {
-        for (const src of [m.src, m.original]) {
+        for (const src of [m.src, m.original, m.poster]) {
           const k = mediaKey(src);
           if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
         }
@@ -345,7 +345,7 @@ export const handler = async (event) => {
       const gone = list.find((c) => c.id === commentId);
       await putJson(SITE, key, list.filter((c) => c.id !== commentId));
       for (const m of gone?.media ?? []) {
-        for (const src of [m.src, m.original]) {
+        for (const src of [m.src, m.original, m.poster]) {
           const k = mediaKey(src);
           if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
         }
