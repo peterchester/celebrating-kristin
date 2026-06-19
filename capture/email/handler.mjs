@@ -20,6 +20,7 @@ import {
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { randomBytes, createHash } from 'node:crypto';
 import { simpleParser } from 'mailparser';
+import { earliestRecordingDate } from './mediadate.mjs';
 
 const s3 = new S3Client({});
 const ses = new SESClient({});
@@ -227,7 +228,11 @@ export const handler = async (event) => {
   if (!text && !media.length) { console.log('memory: empty (no text or media), skipped'); return; }
 
   const now = new Date();
-  const entry = { author: { name: fromName }, ...(title ? { title } : {}), ...(text ? { body: text } : {}), media, submittedAt: now.toISOString(), status: 'published' };
+  // Emailed content has no date field, so derive the memory date from the
+  // attachments' embedded capture metadata (EXIF / video creation time / audio
+  // tags). Earliest valid date wins; absent if nothing usable is found.
+  const memoryDate = await earliestRecordingDate(parsed.attachments, now);
+  const entry = { author: { name: fromName }, ...(title ? { title } : {}), ...(memoryDate ? { memoryDate } : {}), ...(text ? { body: text } : {}), media, submittedAt: now.toISOString(), status: 'published' };
   await putJson(SITE, `${ENTRIES}${id}.json`, entry);
 
   const tokens = await loadTokens();
@@ -236,5 +241,5 @@ export const handler = async (event) => {
   if (fromAddr) await putText(PRIV, CONTACTS, (await getText(PRIV, CONTACTS, '')) + JSON.stringify({ id, name: fromName, email: fromAddr }) + '\n');
 
   await rebuildIndex();
-  console.log(`✓ email memory ${id} from ${fromAddr}${media.length ? ` (+${media.length} media)` : ''}`);
+  console.log(`✓ email memory ${id} from ${fromAddr}${media.length ? ` (+${media.length} media)` : ''}${memoryDate ? ` [date ${memoryDate}]` : ''}`);
 };

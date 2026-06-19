@@ -5,6 +5,8 @@
   "private": true,
   "description": "SES inbound email processor (separate Lambda; pulls in mailparser).",
   "dependencies": {
-    "mailparser": "^3.7.1"
+    "exifr": "^7.1.3",
+    "mailparser": "^3.7.1",
+    "music-metadata": "^11.13.0"
   }
 }

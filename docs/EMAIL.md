@@ -3,7 +3,10 @@
 Let people contribute by email. Send to **celebrate@kristinallen.com**:
 
 - A **fresh email** → a new memory. Subject becomes the title; body becomes the
-  text; photo/audio/video attachments become media.
+  text; photo/audio/video attachments become media. If an attachment carries an
+  embedded capture date (photo EXIF, video creation time, or audio tag), the
+  earliest one becomes the memory's date — web contributors pick a date by hand,
+  but emailers have no field for it, so we read it from the file.
 - A **reply to a notification** → a reflection on that memory. Notifications
   carry a `[ref:<id>]` tag in the subject and set `Reply-To: celebrate@…`, so
   replying routes the message back to the right memory.
@@ -58,9 +61,9 @@ If you set up notification emails already, this is done. Otherwise: SES console
 git checkout main && git pull
 ```
 
-**3. Build + deploy the backend.** `mailparser` is a real dependency now, so you
-must `sam build` before deploying (earlier deploys skipped it because there were
-no dependencies):
+**3. Build + deploy the backend.** The email Lambda has real dependencies
+(`mailparser`, plus `exifr` and `music-metadata` for reading attachment capture
+dates), so you must `sam build` before deploying to bundle them:
 ```bash
 read -r ADMIN_TOKEN          # paste your admin token
 sam build
@@ -118,5 +121,11 @@ The MX record and rule-set activation are one-time — no need to repeat them.
 - **No per-contributor edit token** for emailed content — there's no browser
   cookie. Admin can still edit/delete anything via the admin token.
 - Tiny inline images (< 8 KB, e.g. signature logos) are skipped.
+- **Memory date is best-effort.** It's read from attachment metadata (EXIF
+  `DateTimeOriginal`, video `mvhd` creation time, audio tags). Files with no such
+  data — screenshots, scans, re-saved/stripped images — yield no date, and the
+  entry simply has none (same as before). Implausible dates (future, or before
+  1995 from an unset camera clock) are rejected. Admin can always set the date by
+  hand afterward.
 - Reply quoting and signatures are trimmed heuristically; odd clients may leave
   a stray quoted line.
