@@ -21,6 +21,7 @@ ALLOW_ORIGIN="${ALLOW_ORIGIN:-https://celebrate.kristinallen.com}"
 ADMIN_TOKEN="${ADMIN_TOKEN:-}"
 TURNSTILE_SECRET="${TURNSTILE_SECRET:-}"
 NOTIFY_FROM="${NOTIFY_FROM:-}"
+EMAIL_ADDRESS="${EMAIL_ADDRESS:-}"
 SITE_URL="${SITE_URL:-}"
 
 command -v sam >/dev/null 2>&1 || {
@@ -44,6 +45,7 @@ OVERRIDES="SiteBucketName=${SITE_BUCKET} AllowOrigin=${ALLOW_ORIGIN}"
 [ -n "$ADMIN_TOKEN" ]      && OVERRIDES="$OVERRIDES AdminToken=${ADMIN_TOKEN}"
 [ -n "$TURNSTILE_SECRET" ] && OVERRIDES="$OVERRIDES TurnstileSecret=${TURNSTILE_SECRET}"
 [ -n "$NOTIFY_FROM" ]      && OVERRIDES="$OVERRIDES NotifyFrom=${NOTIFY_FROM}"
+[ -n "$EMAIL_ADDRESS" ]    && OVERRIDES="$OVERRIDES EmailAddress=${EMAIL_ADDRESS}"
 [ -n "$SITE_URL" ]         && OVERRIDES="$OVERRIDES SiteUrl=${SITE_URL}"
 
 echo "→ Deploying Lambda stack '${STACK}'..."
