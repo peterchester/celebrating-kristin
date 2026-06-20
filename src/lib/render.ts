@@ -139,12 +139,29 @@ export function dateLabel(memoryDate?: string): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
+// A lead image that's markedly portrait or low-resolution looks poor as a
+// full-bleed banner — the banner crops tall images and upscales small ones into
+// blur. In those cases we skip the banner and render the image inline in the
+// body like any other attachment. Decided client-side from the loaded image's
+// natural dimensions, since no size metadata is stored.
+const LEAD_TALL_RATIO = 1.2;        // height/width above this → treat as tall
+const LEAD_MIN_BANNER_WIDTH = 1000; // natural width below this → treat as low-res
+export function shouldInlineLeadImage(width: number, height: number): boolean {
+  if (!width || !height) return false; // unknown dimensions → keep the banner
+  return height / width > LEAD_TALL_RATIO || width < LEAD_MIN_BANNER_WIDTH;
+}
+
 // ── Single post (mirrors memory/[id].astro) ──────────────────────────────────
-// The visual lead (image or video) becomes a full-bleed banner above the title;
-// an audio lead stays inline above the text. Remaining media follow the body.
-export function bannerHTML(entry: Entry): string {
+// The visual lead becomes a full-bleed banner above the title; an audio lead —
+// or a tall/low-res image lead (inlineLead) — stays inline above the text
+// instead. Remaining media follow the body. `inlineLead` is set by the caller
+// after measuring the lead image (see shouldInlineLeadImage).
+export function bannerHTML(entry: Entry, inlineLead = false): string {
   const lead = (entry.media ?? [])[0];
-  if (!lead || (lead.type !== 'image' && lead.type !== 'video')) return '';
+  if (!lead) return '';
+  // Video always banners; an image banners unless the caller demoted it inline.
+  const isBanner = lead.type === 'video' || (lead.type === 'image' && !inlineLead);
+  if (!isBanner) return '';
   const m =
     lead.type === 'image'
       ? `<img src="${esc(lead.src)}" alt="${esc(lead.alt ?? lead.caption ?? '')}" />`
@@ -153,10 +170,12 @@ export function bannerHTML(entry: Entry): string {
   return `<div class="post-banner">${m}${cap}</div>`;
 }
 
-export function postContentHTML(entry: Entry): string {
+export function postContentHTML(entry: Entry, inlineLead = false): string {
   const media = entry.media ?? [];
   const lead = media[0];
-  const hasBanner = !!lead && (lead.type === 'image' || lead.type === 'video');
+  // Mirror bannerHTML: an inlined image lead is NOT a banner, so it falls
+  // through to the inline render below alongside audio leads.
+  const hasBanner = !!lead && (lead.type === 'video' || (lead.type === 'image' && !inlineLead));
   const paragraphs = (entry.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const dl = dateLabel(entry.memoryDate);
   const rel = entry.author.relationship ? `<span> · Kristin's ${esc(entry.author.relationship.toLowerCase())}</span>` : '';
