@@ -182,9 +182,14 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   const date = dl ? `<span class="date"> · Remembering ${esc(dl)}</span>` : '';
 
   let html = '';
+  // A tall/low-res image lead (demoted from the banner) still leads the page,
+  // above the title — keeping the "photo at the top" feel, just rendered inline
+  // and uncropped like any other body image rather than as a full-bleed banner.
+  if (!hasBanner && lead?.type === 'image') html += mediaHTML(lead);
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
   html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
-  if (!hasBanner && lead) html += mediaHTML(lead);
+  // An audio lead stays inline just under the byline (no banner for audio).
+  if (!hasBanner && lead?.type === 'audio') html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</article>`;
   html += media.slice(1).map(mediaHTML).join('');
   return html;
