@@ -27,6 +27,34 @@ export const esc = (s: unknown): string =>
 
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + '…' : s);
 
+// Common title/name abbreviations whose trailing period must NOT be treated as
+// a sentence end (e.g. "Dr.", "Mr. and Mrs.", "St. Mary's"). Lowercased, no dot.
+const ABBREVIATIONS = new Set([
+  'mr', 'mrs', 'ms', 'mx', 'dr', 'prof', 'rev', 'fr', 'sr', 'jr', 'st', 'mt', 'vs', 'etc',
+]);
+
+// Grid-card preview text. Prefer ending at the first sentence boundary — a
+// '.', '!' or '?' followed by whitespace or the end of the text — so a card
+// ends on a complete thought rather than a mid-sentence cut. The whitespace/end
+// lookahead avoids breaking on decimals (3.5) or URLs (example.com); a period is
+// also skipped when it follows a known abbreviation or a single-letter initial
+// ("J. R. R."). When the first real sentence runs past the limit (or there's no
+// sentence break at all), fall back to the hard character truncation.
+const firstSentence = (s: string, n: number): string => {
+  const re = /[.!?](?=\s|$)/g;
+  for (let m = re.exec(s); m; m = re.exec(s)) {
+    const end = m.index;
+    if (s[end] === '.') {
+      // Include apostrophes so a possessive ("Mary's.") reads as a whole word
+      // rather than collapsing to a stray single-letter "s".
+      const word = (s.slice(0, end).match(/([A-Za-z']+)$/)?.[1] ?? '').toLowerCase();
+      if (word.length === 1 || ABBREVIATIONS.has(word)) continue; // abbreviation/initial, not a sentence end
+    }
+    return end + 1 <= n ? s.slice(0, end + 1) : truncate(s, n);
+  }
+  return truncate(s, n);
+};
+
 // Escape text, then turn bare URLs (http(s):// or www.) into clickable links.
 // Safe by construction: escaping runs first (no raw HTML survives), and only
 // http/https URLs are linked — never javascript:/data:. Trailing sentence
@@ -56,7 +84,7 @@ export function cardHTML(entry: Entry): string {
   const kind = firstImage ? 'image' : firstVideo ? 'video' : hasAudio ? 'audio' : 'text';
 
   const firstPara = (entry.body || '').split(/\n\s*\n/)[0].trim();
-  const excerpt = truncate(firstPara, kind === 'text' ? 320 : 180);
+  const excerpt = firstSentence(firstPara, kind === 'text' ? 320 : 180);
   const excerptHTML = excerpt ? `<p class="excerpt">${esc(excerpt)}</p>` : '';
 
   let coverHTML = '';
