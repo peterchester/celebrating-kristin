@@ -166,3 +166,48 @@
   cursor: pointer;
 }
 .reflection-del[hidden] { display: none; }
+
+/* ── Photo lightbox ─────────────────────────────────────────────────────────
+   Built in JS (src/lib/lightbox.ts) and appended to <body>, so its styles are
+   global. Clickable photos get .lb-thumb. */
+.lb-thumb { cursor: zoom-in; }
+body.lb-lock { overflow: hidden; }
+.lightbox {
+  position: fixed; inset: 0; z-index: 1000; background: #000;
+  display: grid; grid-template-rows: 1fr auto;
+}
+.lightbox[hidden] { display: none; }
+/* Stage fills the space above the bar; the photo fits the viewport, and a small
+   photo shows at native size (max-* caps down only, width/height auto never up). */
+.lb-stage { display: flex; align-items: center; justify-content: center; min-height: 0; padding: 1.5rem; }
+.lb-img {
+  max-width: 100%; max-height: 100%; width: auto; height: auto;
+  object-fit: contain; opacity: 0; transition: opacity 0.15s ease; user-select: none;
+}
+.lb-bar {
+  display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.1rem;
+  color: #fff; font-family: -apple-system, system-ui, sans-serif;
+}
+.lb-counter { font-variant-numeric: tabular-nums; opacity: 0.75; font-size: 0.9rem; min-width: 3.5rem; }
+.lb-caption { flex: 1; text-align: center; font-style: italic; opacity: 0.9; font-size: 0.9rem; }
+.lb-download {
+  flex-shrink: 0; color: #fff; text-decoration: none; font-size: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 0.4rem 1.1rem;
+}
+.lb-download:hover { background: rgba(255, 255, 255, 0.12); }
+/* On-screen controls */
+.lb-close, .lb-prev, .lb-next {
+  position: absolute; z-index: 1; display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.12); color: #fff; border: none; border-radius: 999px;
+  cursor: pointer; line-height: 1; -webkit-tap-highlight-color: transparent;
+}
+.lb-close:hover, .lb-prev:hover, .lb-next:hover { background: rgba(255, 255, 255, 0.25); }
+.lb-close { top: 1rem; right: 1.1rem; width: 2.6rem; height: 2.6rem; font-size: 1.7rem; }
+.lb-prev, .lb-next { top: 50%; transform: translateY(-50%); width: 3rem; height: 3rem; font-size: 2rem; }
+.lb-prev { left: 0.8rem; }
+.lb-next { right: 0.8rem; }
+.lb-prev[hidden], .lb-next[hidden] { display: none; }
+@media (max-width: 640px) {
+  .lb-prev, .lb-next { width: 2.6rem; height: 2.6rem; font-size: 1.6rem; }
+  .lb-caption { display: none; } /* keep the bar uncluttered on small screens */
+}
