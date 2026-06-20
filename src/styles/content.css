@@ -93,6 +93,10 @@
 
 /* ── Media attachment ─────────────────────────────────────────────────────── */
 .media { margin: 1.5rem 0; }
+/* A demoted lead image (tall/low-res header shown inline at the top of the post)
+   is the first child of #post-content; it needs less space above it than a
+   mid-body attachment, so halve its top margin. */
+#post-content > .media:first-child { margin-top: 0.75rem; }
 .media img { width: 100%; height: auto; border-radius: 6px; display: block; }
 /* Inline videos: natural aspect, centered, height-capped so portrait clips
    don't run off the screen. */
