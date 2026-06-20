@@ -27,6 +27,19 @@ export const esc = (s: unknown): string =>
 
 const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n).trimEnd() + '…' : s);
 
+// Grid-card preview text. Prefer ending at the first sentence boundary — a
+// '.', '!' or '?' followed by whitespace or the end of the text — so a card
+// ends on a complete thought rather than a mid-sentence cut. The whitespace/end
+// lookahead avoids breaking on decimals (3.5) or URLs (example.com). When the
+// first sentence runs past the limit (or there's no sentence break at all), fall
+// back to the hard character truncation we've always used.
+const firstSentence = (s: string, n: number): string => {
+  const m = s.match(/[.!?](?=\s|$)/);
+  const end = m?.index ?? -1;
+  if (end >= 0 && end + 1 <= n) return s.slice(0, end + 1);
+  return truncate(s, n);
+};
+
 // Escape text, then turn bare URLs (http(s):// or www.) into clickable links.
 // Safe by construction: escaping runs first (no raw HTML survives), and only
 // http/https URLs are linked — never javascript:/data:. Trailing sentence
@@ -56,7 +69,7 @@ export function cardHTML(entry: Entry): string {
   const kind = firstImage ? 'image' : firstVideo ? 'video' : hasAudio ? 'audio' : 'text';
 
   const firstPara = (entry.body || '').split(/\n\s*\n/)[0].trim();
-  const excerpt = truncate(firstPara, kind === 'text' ? 320 : 180);
+  const excerpt = firstSentence(firstPara, kind === 'text' ? 320 : 180);
   const excerptHTML = excerpt ? `<p class="excerpt">${esc(excerpt)}</p>` : '';
 
   let coverHTML = '';
