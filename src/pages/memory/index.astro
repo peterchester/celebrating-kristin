@@ -80,7 +80,7 @@ const TURNSTILE_SITE_KEY =
 </Base>
 
 <script>
-  import { bannerHTML, postContentHTML, reflectionHTML } from '../../lib/render';
+  import { bannerHTML, postContentHTML, reflectionHTML, shouldInlineLeadImage } from '../../lib/render';
   import { uploadOne } from '../../lib/upload';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
@@ -348,14 +348,33 @@ const TURNSTILE_SITE_KEY =
     return null;
   }
 
+  // Load just enough of the lead image to read its natural dimensions, so we can
+  // decide before first paint whether it should be a full-bleed banner or an
+  // inline body image (tall/low-res images look bad as banners). Resolves false
+  // (= keep the banner) on error or if the image is slow, so the post never
+  // stalls on a heavy hero. The browser reuses this fetch for the actual render.
+  function measureInlineLead(src: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      let done = false;
+      const finish = (v: boolean) => { if (!done) { done = true; resolve(v); } };
+      img.onload = () => finish(shouldInlineLeadImage(img.naturalWidth, img.naturalHeight));
+      img.onerror = () => finish(false);
+      setTimeout(() => finish(false), 1500);
+      img.src = src;
+    });
+  }
+
   async function main() {
     if (!id) return showNotFound();
     const entry = await fetchEntry(id);
     if (!entry) return showNotFound();
 
     document.title = (entry.title ? entry.title : 'A memory from ' + (entry.author?.name || 'a friend')) + ' — Celebrating Kristin';
-    if (bannerEl) bannerEl.innerHTML = bannerHTML(entry);
-    if (contentEl) contentEl.innerHTML = postContentHTML(entry);
+    const lead = entry.media?.[0];
+    const inlineLead = lead?.type === 'image' ? await measureInlineLead(lead.src) : false;
+    if (bannerEl) bannerEl.innerHTML = bannerHTML(entry, inlineLead);
+    if (contentEl) contentEl.innerHTML = postContentHTML(entry, inlineLead);
 
     setupNav(id);
     setupTools(entry);
