@@ -81,6 +81,7 @@ const TURNSTILE_SITE_KEY =
 
 <script>
   import { bannerHTML, postContentHTML, reflectionHTML, shouldInlineLeadImage } from '../../lib/render';
+  import { openGallery, attachThumbs, imageItems, isLightboxOpen } from '../../lib/lightbox';
   import { uploadOne } from '../../lib/upload';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
@@ -129,6 +130,8 @@ const TURNSTILE_SITE_KEY =
     if (navEl) navEl.hidden = false;
 
     document.addEventListener('keydown', (e) => {
+      // While the photo gallery is open, arrows belong to it, not post-to-post nav.
+      if (isLightboxOpen()) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -254,7 +257,10 @@ const TURNSTILE_SITE_KEY =
     function draw() {
       listEl!.innerHTML = items.map(reflectionHTML).join('');
       const mine = owned();
-      listEl!.querySelectorAll('.reflection').forEach((el) => {
+      listEl!.querySelectorAll('.reflection').forEach((el, k) => {
+        // Each reflection's photos are their own gallery.
+        const photos = imageItems(items[k]?.media);
+        attachThumbs([...el.querySelectorAll('.media img')] as HTMLImageElement[], photos);
         const cid = el.getAttribute('data-id') || '';
         const own = mine.find((o: any) => o.id === 'comment:' + cid);
         if (adminToken || own) {
@@ -375,6 +381,16 @@ const TURNSTILE_SITE_KEY =
     const inlineLead = lead?.type === 'image' ? await measureInlineLead(lead.src) : false;
     if (bannerEl) bannerEl.innerHTML = bannerHTML(entry, inlineLead);
     if (contentEl) contentEl.innerHTML = postContentHTML(entry, inlineLead);
+
+    // Make the post's photos open a full-screen gallery. Banner image (if any)
+    // comes first, then body images — the same order as the photo media, so the
+    // DOM <img>s line up index-for-index with the gallery items.
+    const postPhotos = imageItems(entry.media);
+    const postImgs = [
+      ...document.querySelectorAll('#post-banner img'),
+      ...document.querySelectorAll('#post-content .media img'),
+    ] as HTMLImageElement[];
+    attachThumbs(postImgs, postPhotos);
 
     setupNav(id);
     setupTools(entry);
