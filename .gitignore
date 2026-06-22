@@ -4,6 +4,11 @@ dist/
 .DS_Store
 *.log
 
+# Claude Code: ignore personal/local config. A shared .claude/settings.json (or
+# skills/commands) can still be committed if you ever want to share Claude setup.
+.claude/settings.local.json
+.claude/launch.json
+
 # Keep originals + private capture data out of the repo
 originals/
 capture/.env
