@@ -6,9 +6,10 @@ interface Props {
 }
 const { title = 'Celebrating Kristin', description = 'Stories, memories, and reflections.' } = Astro.props;
 // Keep the footer (its gradient) everywhere, but drop the "Share a memory"
-// button on the share page and on single memory pages (which have their own nav).
+// button on the share page, single memory pages (which have their own nav),
+// and the /together info page.
 const fp = Astro.url.pathname.replace(/\/$/, '');
-const hideShareButton = fp === '/share' || fp === '/memory';
+const hideShareButton = fp === '/share' || fp === '/memory' || fp === '/together';
 ---
 
 <!doctype html>
@@ -96,6 +97,20 @@ const hideShareButton = fp === '/share' || fp === '/memory';
         background: linear-gradient(to bottom, rgba(7, 11, 24, 0.5), rgba(7, 11, 24, 0.62));
       }
       @media (prefers-reduced-motion: reduce) { .bg-video { display: none; } }
+      /* Site-wide alert bar — hidden until the admin sets alert text on
+         /together. Sticky so the message stays visible; the whole bar links to
+         /together. Populated at runtime from /data/together.json. */
+      .alert-bar {
+        display: block; position: sticky; top: 0; z-index: 40;
+        text-align: center; text-decoration: none;
+        font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; font-weight: 600;
+        padding: .7rem 1.5rem; color: #08111f;
+        background: linear-gradient(120deg, #7ee8c9, #8fd0f0);
+        box-shadow: 0 2px 18px rgba(120, 230, 200, 0.35);
+      }
+      .alert-bar::after { content: ' →'; opacity: .8; }
+      .alert-bar:hover { filter: brightness(1.04); }
+      .alert-bar[hidden] { display: none; }
       .share-cta {
         display: inline-block; margin-top: 1.5rem; padding: .72rem 1.5rem;
         background: linear-gradient(120deg, #7ee8c9, #8fd0f0); color: #08111f;
@@ -116,6 +131,7 @@ const hideShareButton = fp === '/share' || fp === '/memory';
     </style>
   </head>
   <body>
+    <a id="alert-bar" class="alert-bar" href="/together" hidden></a>
     <video class="bg-video" autoplay muted loop playsinline webkit-playsinline preload="auto" aria-hidden="true">
       <source src="/img/background.webm" type="video/webm" />
       <source src="/img/background.mp4" type="video/mp4" />
@@ -147,6 +163,24 @@ const hideShareButton = fp === '/share' || fp === '/memory';
         v.addEventListener('error', hide);
         if (v.readyState >= 2) tryPlay();
         else v.addEventListener('loadeddata', tryPlay, { once: true });
+      }
+    </script>
+    <script>
+      // Show the alert bar only when the admin has set alert text on /together.
+      // Plain text (textContent), so the alert can never inject markup.
+      const bar = document.getElementById('alert-bar');
+      // Don't show the bar on the page it links to — you're already there.
+      const onTogether = location.pathname.replace(/\/$/, '') === '/together';
+      if (bar && !onTogether) {
+        fetch('/data/together.json', { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            const text = d && typeof d.alert === 'string' ? d.alert.trim() : '';
+            if (!text) return;
+            bar.textContent = text;
+            bar.hidden = false;
+          })
+          .catch(() => {});
       }
     </script>
     <div class="page"><slot /></div>
