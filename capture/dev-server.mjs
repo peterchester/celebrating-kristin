@@ -27,6 +27,7 @@ const ENTRIES = join(PUBLIC, 'entries');
 const COMMENTS = join(PUBLIC, 'comments'); // comments/<entryId>.json — reflections
 const DATA_DIR = join(PUBLIC, 'data');
 const INDEX = join(DATA_DIR, 'index.json');
+const TOGETHER = join(DATA_DIR, 'together.json'); // admin-editable /together page content
 const PRIVATE = join(ROOT, 'capture', 'private'); // emails, edit tokens — gitignored, never published
 const TOKENS = join(PRIVATE, 'tokens.json'); // { entryId: sha256(editToken) }
 const PORT = 8787;
@@ -155,6 +156,23 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/admin-check') {
       const { adminToken } = JSON.parse((await readBody(req)).toString() || '{}');
       return isAdmin(adminToken) ? send(res, 200, { ok: true }) : send(res, 403, { error: 'not allowed' });
+    }
+
+    // Save the admin-editable /together page (alert bar text + title + HTML body).
+    // Admin only. Stored as a public JSON file the site reads at runtime; the
+    // body's HTML is sanitized in the browser at render time, not here.
+    if (req.method === 'POST' && url.pathname === '/page') {
+      const { adminToken, alert, title, body } = JSON.parse((await readBody(req)).toString() || '{}');
+      if (!isAdmin(adminToken)) return send(res, 403, { error: 'not allowed' });
+      const page = {
+        alert: String(alert ?? '').trim(),
+        title: String(title ?? '').trim(),
+        body: String(body ?? ''),
+      };
+      await mkdir(DATA_DIR, { recursive: true });
+      await writeFile(TOGETHER, JSON.stringify(page, null, 2) + '\n');
+      console.log('✎ updated /together page');
+      return send(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/presign') {

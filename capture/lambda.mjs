@@ -38,6 +38,7 @@ const EMAIL_ADDRESS = process.env.EMAIL_ADDRESS || '';      // inbound address f
 const ENTRIES = 'entries/';        // entries/<id>.json  (public)
 const COMMENTS = 'comments/';      // comments/<entryId>.json — array of reflections (public)
 const INDEX = 'data/index.json';   // the list the site reads (public, derived)
+const TOGETHER = 'data/together.json'; // admin-editable /together page (public)
 const TOKENS = 'tokens.json';      // { id: sha256(editToken) }  (private)
 const CONTACTS = 'contacts.jsonl'; // one {id,name,email} per line (private)
 const NO_CACHE = 'public, max-age=0, must-revalidate'; // so new data shows at once
@@ -213,6 +214,20 @@ export const handler = async (event) => {
     // given the token's entropy, but don't shorten the token.
     if (method === 'POST' && path === '/admin-check') {
       return isAdmin(s.adminToken) ? json(200, { ok: true }) : json(403, { error: 'not allowed' });
+    }
+
+    // Save the admin-editable /together page (alert bar text + title + HTML body).
+    // Admin only. Written as a public JSON file the site reads at runtime; the
+    // body's HTML is sanitized in the browser at render time, not here.
+    if (method === 'POST' && path === '/page') {
+      if (!isAdmin(s.adminToken)) return json(403, { error: 'not allowed' });
+      const page = {
+        alert: String(s.alert ?? '').trim(),
+        title: String(s.title ?? '').trim(),
+        body: String(s.body ?? ''),
+      };
+      await putJson(SITE, TOGETHER, page);
+      return json(200, { ok: true });
     }
 
     if (method === 'POST' && path === '/presign') {

@@ -1,0 +1,221 @@
+---
+import Base from '../layouts/Base.astro';
+// An admin-editable info page. Everyone sees the title + body (rich HTML,
+// sanitized client-side). An admin — verified by the rk_admin cookie against the
+// capture backend — additionally gets an editor for the alert-bar text, the
+// title, and the HTML body. The content lives in /data/together.json, written by
+// the backend's /page endpoint and read here at runtime (so edits show with no
+// rebuild — same pattern as the memories).
+---
+
+<Base title="Together — Celebrating Kristin">
+  <main class="wrap together">
+    <p class="back"><a href="/">← Home</a></p>
+
+    <div class="content-card">
+      <article id="page-content" class="together-body"></article>
+      <p id="empty" class="empty" hidden>There's nothing here yet.</p>
+    </div>
+
+    <section id="editor" class="editor" hidden>
+      <h2 class="editor-title">Edit this page</h2>
+      <p class="editor-note">
+        You're seeing this because admin mode is on for this device. The
+        <strong>alert</strong> shows as a bar at the top of every page, linking
+        here; leave it empty for no bar. The <strong>body</strong> accepts HTML
+        (headings, lists, tables, links, images, basic formatting).
+      </p>
+      <form id="page-form">
+        <label>
+          Alert bar text
+          <input name="alert" type="text" placeholder="Leave empty to hide the alert bar" />
+        </label>
+        <label>
+          Page title
+          <input name="title" type="text" />
+        </label>
+        <label>
+          Body (HTML)
+          <textarea name="body" rows="16" spellcheck="false"></textarea>
+        </label>
+        <div class="form-buttons">
+          <button type="submit">Save</button>
+          <a class="ghost" href="/together">View</a>
+        </div>
+        <p id="page-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+</Base>
+
+<script>
+  import { sanitizeHTML } from '../lib/sanitize';
+
+  // Writes go to the capture backend; the page content itself is a same-origin
+  // static JSON file. API base mirrors the admin / memory pages.
+  const SUBMIT = import.meta.env.PUBLIC_SUBMIT_API || '';
+  const API_BASE =
+    import.meta.env.PUBLIC_API_BASE ||
+    (SUBMIT ? SUBMIT.replace(/\/submit$/, '') : (import.meta.env.DEV ? 'http://localhost:8787' : ''));
+
+  const cookie = (k: string) => {
+    const m = document.cookie.split('; ').find((c) => c.startsWith(k + '='));
+    return m ? decodeURIComponent(m.slice(k.length + 1)) : null;
+  };
+
+  const contentEl = document.getElementById('page-content') as HTMLElement;
+  const emptyEl = document.getElementById('empty') as HTMLElement;
+
+  type Page = { alert?: string; title?: string; body?: string };
+
+  async function loadPage(): Promise<Page> {
+    try {
+      const r = await fetch('/data/together.json', { cache: 'no-store' });
+      if (r.ok) return await r.json();
+    } catch {}
+    return {};
+  }
+
+  function render(page: Page) {
+    const title = (page.title || '').trim();
+    const bodyHTML = sanitizeHTML(page.body || '');
+    document.title = (title || 'Together') + ' — Celebrating Kristin';
+    contentEl.innerHTML = (title ? `<h1></h1>` : '') + bodyHTML;
+    // Set the title via textContent so it's plain text, never markup.
+    if (title) (contentEl.querySelector('h1') as HTMLElement).textContent = title;
+    emptyEl.hidden = !!(title || bodyHTML);
+  }
+
+  // Ask the backend whether the saved token hash is the admin token's hash.
+  async function isAdmin(hash: string): Promise<boolean> {
+    if (!API_BASE) return false;
+    try {
+      const r = await fetch(API_BASE + '/admin-check', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ adminToken: hash }),
+      });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function setupEditor(page: Page, adminHash: string) {
+    const editor = document.getElementById('editor') as HTMLElement;
+    const form = document.getElementById('page-form') as HTMLFormElement;
+    const statusEl = document.getElementById('page-status') as HTMLElement;
+    const fld = (n: string) => form.querySelector('[name="' + n + '"]') as HTMLInputElement & HTMLTextAreaElement;
+
+    fld('alert').value = page.alert || '';
+    fld('title').value = page.title || '';
+    fld('body').value = page.body || '';
+    emptyEl.hidden = true; // an admin always has the editor, so never show "nothing here"
+    editor.hidden = false;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusEl.textContent = 'Saving…';
+      try {
+        const r = await fetch(API_BASE + '/page', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            adminToken: adminHash,
+            alert: fld('alert').value,
+            title: fld('title').value,
+            body: fld('body').value,
+          }),
+        });
+        if (!r.ok) throw new Error('Could not save — your admin access may have expired.');
+        // Re-render the live view from what we just saved, and refresh the bar.
+        const saved: Page = { alert: fld('alert').value, title: fld('title').value, body: fld('body').value };
+        render(saved);
+        statusEl.textContent = 'Saved. 🤍';
+      } catch (err) {
+        statusEl.textContent = (err as Error).message;
+      }
+    });
+  }
+
+  (async () => {
+    const page = await loadPage();
+    render(page);
+    const hash = cookie('rk_admin');
+    if (hash && (await isAdmin(hash))) setupEditor(page, hash);
+  })();
+</script>
+
+<style>
+  .together { padding-top: 2.5rem; padding-bottom: 3rem; }
+  .back { font-family: -apple-system, system-ui, sans-serif; font-size: .9rem; margin-bottom: 1.5rem; }
+
+  /* A near-opaque light card so the content reads clearly over the video
+     background (the rest of the site is light text on dark; here we flip to
+     dark text on white). Body text colors are set on .together-body below. */
+  .content-card {
+    background: rgba(252, 253, 255, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 16px;
+    padding: 2.75rem 2.5rem;
+    box-shadow: 0 14px 50px rgba(0, 0, 0, 0.4);
+  }
+  @media (max-width: 34rem) { .content-card { padding: 1.75rem 1.4rem; } }
+  .empty { color: #5a6376; margin: 0; }
+
+  .editor { margin-top: 3.5rem; padding-top: 2rem; border-top: 1px solid var(--line); font-family: -apple-system, system-ui, sans-serif; }
+  .editor[hidden] { display: none; }
+  .editor-title { font-family: 'Vujahday Script', cursive; font-weight: 400; font-size: 2.4rem; line-height: 1; margin: 0 0 .75rem; }
+  .editor-note { color: var(--soft); font-size: .9rem; margin: 0 0 1.5rem; }
+  #page-form { display: grid; gap: 1rem; }
+  #page-form label { display: grid; gap: .35rem; font-size: .9rem; color: var(--ink); }
+  #page-form input, #page-form textarea {
+    font: inherit; padding: .6rem .7rem; border: 1px solid var(--line);
+    border-radius: 8px; width: 100%; background: rgba(255, 255, 255, 0.05); color: var(--ink);
+  }
+  #page-form textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; line-height: 1.5; resize: vertical; }
+  .form-buttons { display: flex; gap: .5rem; align-items: center; }
+  .form-buttons button {
+    padding: .6rem 1.4rem; border: 1px solid var(--accent); border-radius: 999px;
+    background: var(--accent); color: #08111f; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .form-buttons .ghost {
+    padding: .6rem 1.4rem; border: 1px solid var(--line); border-radius: 999px;
+    background: transparent; color: var(--soft); text-decoration: none; font-size: .95rem;
+  }
+  #page-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
+</style>
+
+{/* The body is injected via innerHTML, so its styles must be global (Astro's
+    scoped styles only apply to markup present at build time). */}
+<style is:global>
+  /* Dark-on-white: the body sits on the light .content-card, so colors here are
+     the inverse of the rest of the (dark) site. */
+  .together-body { color: #232a3d; }
+  .together-body h1 { font-family: 'Vujahday Script', cursive; font-weight: 400; line-height: .95; font-size: 3rem; margin: 0 0 1.5rem; color: #161b2b; }
+  .together-body h2 { font-family: 'Vujahday Script', cursive; font-weight: 400; line-height: .95; font-size: 2.3rem; margin: 2rem 0 .75rem; color: #161b2b; }
+  .together-body h3 { font-size: 1.4rem; font-weight: 600; margin: 1.75rem 0 .5rem; color: #161b2b; }
+  .together-body p { margin: 0 0 1.1rem; }
+  /* Saturated aurora magenta — reads clearly on the white card, and echoes the
+     theme's violet accent (--accent-2). */
+  .together-body a { color: #c01c8f; }
+  .together-body ul, .together-body ol { margin: 0 0 1.1rem; padding-left: 1.5rem; }
+  .together-body li { margin: .3rem 0; }
+  .together-body img { max-width: 100%; height: auto; border-radius: 10px; }
+  .together-body blockquote {
+    margin: 1.25rem 0; padding: .5rem 0 .5rem 1.1rem;
+    border-left: 3px solid #c01c8f; color: #4a5268; font-style: italic;
+  }
+  .together-body pre {
+    background: rgba(20, 27, 43, 0.06); padding: .9rem 1rem; border-radius: 8px;
+    overflow-x: auto; font-size: .9rem;
+  }
+  .together-body code { background: rgba(20, 27, 43, 0.08); padding: .1em .35em; border-radius: 4px; font-size: .9em; }
+  .together-body pre code { background: none; padding: 0; }
+  .together-body hr { border: none; border-top: 1px solid #d6dbe6; margin: 2rem 0; }
+  .together-body table { width: 100%; border-collapse: collapse; margin: 1.25rem 0; font-size: .95rem; }
+  .together-body th, .together-body td { border: 1px solid #d6dbe6; padding: .55rem .7rem; text-align: left; }
+  .together-body th { background: #eef1f7; font-weight: 600; }
+  .together-body figure { margin: 1.5rem 0; }
+  .together-body figcaption { color: #5a6376; font-size: .9rem; margin-top: .4rem; text-align: center; }
+</style>
