@@ -115,9 +115,15 @@ import Base from '../layouts/Base.astro';
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!API_BASE) {
+        statusEl.textContent = 'No backend is configured for this site, so saving isn’t available here.';
+        return;
+      }
       statusEl.textContent = 'Saving…';
+
+      let r: Response;
       try {
-        const r = await fetch(API_BASE + '/page', {
+        r = await fetch(API_BASE + '/page', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -127,14 +133,27 @@ import Base from '../layouts/Base.astro';
             body: fld('body').value,
           }),
         });
-        if (!r.ok) throw new Error('Could not save — your admin access may have expired.');
-        // Re-render the live view from what we just saved, and refresh the bar.
-        const saved: Page = { alert: fld('alert').value, title: fld('title').value, body: fld('body').value };
-        render(saved);
-        statusEl.textContent = 'Saved. 🤍';
-      } catch (err) {
-        statusEl.textContent = (err as Error).message;
+      } catch {
+        // fetch() only rejects on a network/CORS failure, never on an HTTP error.
+        statusEl.textContent = 'Couldn’t reach the save service — check your connection and try again.';
+        return;
       }
+
+      if (!r.ok) {
+        // Distinguish the common failures so the message points at the real fix
+        // (a 404 here means the backend predates the /page endpoint, not an auth
+        // problem — the old message wrongly blamed "admin access").
+        statusEl.textContent =
+          r.status === 403 ? 'Not authorized — re-enter your admin token on the /admin page, then try again.'
+          : r.status === 404 ? 'The save service isn’t available yet — the backend may need to be deployed.'
+          : `Could not save (server error ${r.status}). Please try again.`;
+        return;
+      }
+
+      // Re-render the live view from what we just saved, and refresh the bar.
+      const saved: Page = { alert: fld('alert').value, title: fld('title').value, body: fld('body').value };
+      render(saved);
+      statusEl.textContent = 'Saved. 🤍';
     });
   }
 
