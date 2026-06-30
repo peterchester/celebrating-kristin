@@ -205,3 +205,21 @@ export async function uploadOne(
   const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
   return { type, src: key, caption: '' };
 }
+
+// Upload a single image to use as a video's poster/cover. Optimizes to a web JPEG
+// (max 2000px, EXIF stripped) and uploads just that — no archived original —
+// returning the uploaded key. Used by the edit form's "replace cover image"
+// control. Falls back to the raw file if it can't be optimized (e.g. HEIC).
+export async function uploadPoster(
+  file: File,
+  presignURL: string,
+  ctx?: { author?: string; title?: string },
+): Promise<string> {
+  const originalBase = file.name.replace(/\.[^.]+$/, '');
+  const origExt = (file.name.match(/\.[^.]+$/) || [''])[0] || '';
+  const base = composeBase(ctx, originalBase) + '-cover';
+  const optimized = await optimizeImage(file);
+  return optimized
+    ? presignAndPut(presignURL, optimized, base + '.jpg')
+    : presignAndPut(presignURL, file, base + origExt);
+}

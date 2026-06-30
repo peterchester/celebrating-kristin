@@ -28,6 +28,17 @@ const TURNSTILE_SITE_KEY =
         </span>
       </div>
       <form id="ot-form" hidden>
+        <div id="ot-poster" class="ot-poster" hidden>
+          <span class="ot-poster-title">Cover image</span>
+          <div class="ot-poster-row">
+            <img id="ot-poster-thumb" class="ot-poster-thumb" alt="Current cover" hidden />
+            <div id="ot-poster-empty" class="ot-poster-empty" hidden>No cover yet</div>
+            <div class="ot-poster-controls">
+              <label class="ot-poster-btn">Replace image…<input id="ot-poster-input" type="file" accept="image/*" hidden /></label>
+              <small>A landscape image (about 1280×720) looks best, matching the video. Any size works — it’s resized automatically.</small>
+            </div>
+          </div>
+        </div>
         <label>Title<input name="title" type="text" /></label>
         <label>Date of memory (optional)<input name="memoryDate" type="date" /></label>
         <label>Your name<input name="name" type="text" /></label>
@@ -83,7 +94,7 @@ const TURNSTILE_SITE_KEY =
 <script>
   import { bannerHTML, postContentHTML, reflectionHTML, shouldInlineLeadImage } from '../../lib/render';
   import { openGallery, attachThumbs, imageItems, isLightboxOpen } from '../../lib/lightbox';
-  import { uploadOne } from '../../lib/upload';
+  import { uploadOne, uploadPoster } from '../../lib/upload';
   import { attachHls } from '../../lib/hls';
   import { createUploadProgress } from '../../lib/progress';
 
@@ -168,6 +179,28 @@ const TURNSTILE_SITE_KEY =
     fld('name').value = entry.author?.name || '';
     fld('relationship').value = entry.author?.relationship || '';
     fld('body').value = entry.body || '';
+
+    // Cover/poster editing — only for memories that contain a video. Targets the
+    // first video; its poster is what the gallery card and the player show.
+    const videoIndex = (entry.media || []).findIndex((m: any) => m?.type === 'video');
+    let posterFile: File | null = null;
+    if (videoIndex >= 0) {
+      const posterBox = document.getElementById('ot-poster') as HTMLElement;
+      const posterInput = document.getElementById('ot-poster-input') as HTMLInputElement;
+      const posterThumb = document.getElementById('ot-poster-thumb') as HTMLImageElement;
+      const posterEmpty = document.getElementById('ot-poster-empty') as HTMLElement;
+      const current = entry.media[videoIndex].poster;
+      const showThumb = (src: string) => { posterThumb.src = src; posterThumb.hidden = false; posterEmpty.hidden = true; };
+      if (current) showThumb(current);
+      else { posterThumb.hidden = true; posterEmpty.hidden = false; }
+      posterInput.addEventListener('change', () => {
+        const f = posterInput.files?.[0] || null;
+        posterFile = f;
+        if (f) showThumb(URL.createObjectURL(f)); // local preview before save
+      });
+      posterBox.hidden = false;
+    }
+
     tools.hidden = false;
 
     const creds = () => (ownerToken ? { token: ownerToken } : { adminToken });
@@ -183,14 +216,21 @@ const TURNSTILE_SITE_KEY =
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      statusEl.textContent = 'Saving…';
       try {
+        // If a new cover image was chosen, upload it first and send its key.
+        let posterKey: string | undefined;
+        if (posterFile && PRESIGN) {
+          statusEl.textContent = 'Uploading cover image…';
+          posterKey = await uploadPoster(posterFile, PRESIGN, { title: fld('title').value || id });
+        }
+        statusEl.textContent = 'Saving…';
         const r = await post('/update', {
           title: fld('title').value,
           memoryDate: fld('memoryDate').value,
           name: fld('name').value,
           relationship: fld('relationship').value,
           body: fld('body').value,
+          ...(posterKey ? { poster: posterKey, posterIndex: videoIndex } : {}),
         });
         if (!r.ok) throw new Error('Could not save — your edit access may have expired.');
         location.reload();
@@ -455,6 +495,18 @@ const TURNSTILE_SITE_KEY =
   #ot-form label { display: grid; gap: .35rem; font-size: .9rem; }
   #ot-form input, #ot-form textarea { font: inherit; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; background: rgba(255, 255, 255, 0.05); color: var(--ink); }
   #ot-form textarea { font-family: Georgia, serif; line-height: 1.6; resize: vertical; }
+  /* Cover/poster editor (shown only for video memories). */
+  .ot-poster { display: grid; gap: .5rem; }
+  .ot-poster[hidden] { display: none; }
+  .ot-poster-title { font-size: .9rem; color: var(--soft); }
+  .ot-poster-row { display: flex; gap: 1rem; align-items: flex-start; }
+  .ot-poster-thumb, .ot-poster-empty { width: 150px; height: 90px; flex: none; border-radius: 8px; }
+  .ot-poster-thumb { object-fit: cover; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); }
+  .ot-poster-empty { display: grid; place-items: center; border: 1px dashed var(--line); color: var(--soft); font-size: .8rem; }
+  .ot-poster-thumb[hidden], .ot-poster-empty[hidden] { display: none; }
+  .ot-poster-controls { display: grid; gap: .45rem; }
+  #ot-form .ot-poster-btn { display: inline-block; justify-self: start; width: auto; padding: .45rem 1rem; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.06); color: var(--ink); font-size: .9rem; cursor: pointer; }
+  .ot-poster-controls small { color: var(--soft); font-size: .82rem; }
   .ot-buttons { display: flex; gap: .5rem; }
   .ot-buttons button[type="submit"] { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 600; }
   #ot-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }

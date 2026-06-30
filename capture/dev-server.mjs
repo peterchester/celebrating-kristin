@@ -229,7 +229,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/update') {
-      const { id, token, adminToken, name, relationship, title, body, memoryDate } = JSON.parse((await readBody(req)).toString() || '{}');
+      const { id, token, adminToken, name, relationship, title, body, memoryDate, poster, posterIndex } = JSON.parse((await readBody(req)).toString() || '{}');
       const file = safeEntryPath(id);
       if (!file) return send(res, 400, { error: 'bad id' });
       if (!(await authorize(id, token, adminToken))) return send(res, 403, { error: 'not allowed' });
@@ -242,6 +242,19 @@ const server = createServer(async (req, res) => {
       if (typeof relationship === 'string') entry.author.relationship = relationship.trim() || undefined;
       if (memoryDate === '') delete entry.memoryDate; // cleared
       else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
+
+      // Replace a video's poster/cover image (mirrors the Lambda).
+      if (typeof poster === 'string' && Number.isInteger(posterIndex)) {
+        const m = entry.media?.[posterIndex];
+        if (m && m.type === 'video' && poster.startsWith('/media/') && !poster.includes('..')) {
+          const old = m.poster;
+          m.poster = poster;
+          if (old && old !== poster && old.startsWith('/media/u/')) {
+            const mp = safeMediaPath(old);
+            if (mp) await unlink(mp).catch(() => {});
+          }
+        }
+      }
       entry.editedAt = new Date().toISOString();
       await writeFile(file, JSON.stringify(entry, null, 2) + '\n');
 

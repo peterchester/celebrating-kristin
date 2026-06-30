@@ -352,7 +352,7 @@ export const handler = async (event) => {
     }
 
     if (method === 'POST' && path === '/update') {
-      const { id, token, adminToken, name, relationship, title, body, memoryDate } = s;
+      const { id, token, adminToken, name, relationship, title, body, memoryDate, poster, posterIndex } = s;
       if (!safeId(id)) return json(400, { error: 'bad id' });
       if (!(await authorize(id, token, adminToken))) return json(403, { error: 'not allowed' });
 
@@ -364,6 +364,23 @@ export const handler = async (event) => {
       if (typeof relationship === 'string') entry.author.relationship = relationship.trim() || undefined;
       if (memoryDate === '') delete entry.memoryDate;
       else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
+
+      // Replace a video's poster/cover image. `poster` is the new /media/ key;
+      // `posterIndex` selects which media item (must be a video). A previous
+      // custom poster (media/u/) is deleted; a server-generated one (media/hls/)
+      // is left in place.
+      if (typeof poster === 'string' && Number.isInteger(posterIndex)) {
+        const m = entry.media?.[posterIndex];
+        const newKey = mediaKey(poster);
+        if (m && m.type === 'video' && newKey) {
+          const oldKey = mediaKey(m.poster);
+          m.poster = poster;
+          if (oldKey && oldKey !== newKey && oldKey.startsWith('media/u/')) {
+            await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: oldKey })).catch(() => {});
+          }
+        }
+      }
+
       entry.editedAt = new Date().toISOString();
 
       await putJson(SITE, `${ENTRIES}${id}.json`, entry);
