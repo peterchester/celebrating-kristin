@@ -5,10 +5,13 @@
 // the site displays the optimized one (`src`) and keeps the original (`original`)
 // as a permanent archive.
 //
-// For video: a single upload of the file, plus a poster — a JPEG frame grabbed
-// in the browser (same canvas trick as image optimization) and uploaded as a
-// second object. If the browser can't decode the codec, we skip the poster and
-// the site falls back to its filmstrip cover.
+// For video: a single upload of the master file to media/originals/ (kind:'original')
+// — this is both the permanent archive and the source the backend feeds to AWS
+// MediaConvert. The item comes back marked `processing: true`; the backend later
+// transcodes it to adaptive HLS and fills in `hls` + a server-generated `poster`.
+// We deliberately do NOT grab a poster in the browser anymore — it failed for
+// HEVC/.mov on non-Apple devices; MediaConvert produces a reliable one for every
+// codec instead.
 //
 // For audio: a single upload, no `original`, no poster.
 //
@@ -23,7 +26,9 @@ export interface UploadedMedia {
   type: 'image' | 'audio' | 'video';
   src: string;
   original?: string;
-  poster?: string; // video only: key of a JPEG frame for the cover/poster
+  hls?: string; // video only: set by the backend after transcoding, not at upload time
+  processing?: boolean; // video only: true until the backend finishes transcoding
+  poster?: string; // video only: server-generated cover/poster (added after transcoding)
   caption: string;
 }
 
@@ -86,72 +91,36 @@ async function optimizeImage(file: File): Promise<File | null> {
   }
 }
 
-// Grab a representative frame from a video and return it as a JPEG File for use
-// as the poster. Loads the video into an offscreen element, seeks a little way
-// in (to dodge a black/blank first frame), draws the frame to a canvas capped
-// at MAX_DIM, and re-encodes as JPEG @JPEG_QUALITY — same approach as
-// optimizeImage. Returns null if the browser can't decode the codec (e.g. HEVC
-// on a non-Apple desktop) or anything else goes wrong, so the caller can simply
-// skip the poster.
-async function captureVideoPoster(file: File): Promise<File | null> {
-  if (!file.type.startsWith('video/')) return null;
-  let url: string | null = null;
-  const video = document.createElement('video');
-  try {
-    url = URL.createObjectURL(file);
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'metadata';
-    video.src = url;
+export interface UploadProgress {
+  loaded: number; // bytes sent so far
+  total: number; // total bytes
+  fraction: number; // 0..1
+}
+export type OnUploadProgress = (p: UploadProgress) => void;
 
-    // Wait for enough data to know dimensions and to draw a frame.
-    await new Promise<void>((resolve, reject) => {
-      const fail = () => reject(new Error('video decode failed'));
-      video.onerror = fail;
-      video.onloadeddata = () => resolve();
-      // Safari sometimes fires loadedmetadata but not loadeddata until play;
-      // a timeout keeps us from hanging on a codec the browser won't decode.
-      setTimeout(fail, 5000);
-    });
-
-    // Seek a short way in: 1s, or 10% for very short clips. Clamp inside duration.
-    const dur = Number.isFinite(video.duration) ? video.duration : 0;
-    const target = dur ? Math.min(1, dur * 0.1) : 0;
-    if (target > 0) {
-      await new Promise<void>((resolve, reject) => {
-        video.onseeked = () => resolve();
-        video.onerror = () => reject(new Error('video seek failed'));
-        video.currentTime = target;
-        setTimeout(resolve, 3000); // draw whatever frame we have if seek stalls
-      });
+// PUT the file to S3 with progress reporting. We use XMLHttpRequest rather than
+// fetch because fetch can't report upload (request-body) progress — essential
+// feedback for the multi-GB video masters. Resolves on a 2xx, rejects otherwise.
+function putWithProgress(url: string, file: File, onProgress?: OnUploadProgress): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('content-type', file.type);
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress({ loaded: e.loaded, total: e.total, fraction: e.total ? e.loaded / e.total : 0 });
+        }
+      };
     }
-
-    let w = video.videoWidth;
-    let h = video.videoHeight;
-    if (!w || !h) return null;
-    if (w > MAX_DIM || h > MAX_DIM) {
-      const r = Math.min(MAX_DIM / w, MAX_DIM / h);
-      w = Math.round(w * r);
-      h = Math.round(h * r);
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, w, h);
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', JPEG_QUALITY),
-    );
-    if (!blob) return null;
-    const baseName = file.name.replace(/\.[^.]+$/, '') || 'video';
-    return new File([blob], baseName + '-poster.jpg', { type: 'image/jpeg' });
-  } catch {
-    return null;
-  } finally {
-    video.removeAttribute('src');
-    if (url) URL.revokeObjectURL(url);
-  }
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Upload failed for ${file.name} (HTTP ${xhr.status})`));
+    xhr.onerror = () => reject(new Error('Upload failed for ' + file.name));
+    xhr.onabort = () => reject(new Error('Upload canceled for ' + file.name));
+    xhr.send(file);
+  });
 }
 
 async function presignAndPut(
@@ -159,6 +128,7 @@ async function presignAndPut(
   file: File,
   filename: string,
   kind?: 'original',
+  onProgress?: OnUploadProgress,
 ): Promise<string> {
   const res = await fetch(presignURL, {
     method: 'POST',
@@ -172,16 +142,28 @@ async function presignAndPut(
   });
   if (!res.ok) throw new Error('Could not get upload URL');
   const { url, key } = await res.json();
-  const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-  if (!put.ok) throw new Error('Upload failed for ' + file.name);
+  await putWithProgress(url, file, onProgress);
   return key;
 }
+
+// S3 rejects a single PUT larger than 5 GiB — files that big need multipart
+// upload, which this direct-to-S3 flow doesn't do. Stop early with a clear
+// message instead of uploading for ages and then getting a cryptic 403.
+const S3_MAX_PUT = 5 * 1024 * 1024 * 1024;
 
 export async function uploadOne(
   file: File,
   presignURL: string,
   ctx?: { author?: string; title?: string },
+  onProgress?: OnUploadProgress,
 ): Promise<UploadedMedia> {
+  if (file.size > S3_MAX_PUT) {
+    throw new Error(
+      `"${file.name}" is ${(file.size / 1e9).toFixed(1)} GB — too large to upload here ` +
+        `(the limit is about 5 GB). Please ask the site owner to add it directly.`,
+    );
+  }
+
   // Build the identifying base from author + title (or fall back to the file's
   // original name) so archived keys are human-readable.
   const originalBase = file.name.replace(/\.[^.]+$/, '');
@@ -196,7 +178,8 @@ export async function uploadOne(
   if (optimized) {
     let originalKey: string | undefined;
     try {
-      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original');
+      // The original is the larger upload — report progress on it.
+      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
     } catch {
       originalKey = undefined;
     }
@@ -206,24 +189,19 @@ export async function uploadOne(
       : { type: 'image', src: key, caption: '' };
   }
 
-  const key = await presignAndPut(presignURL, file, base + origExt);
   const type: UploadedMedia['type'] =
     file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'video';
 
-  // For video, try to grab a poster frame in the browser and upload it as a
-  // second object. On any failure we just omit it; the site falls back to the
-  // filmstrip cover.
+  // Video: upload the master to media/originals/ (kind:'original') — it's both the
+  // archive and the MediaConvert source. `src` points at it so the clip plays
+  // progressively right away; `processing` tells the UI a transcode is pending.
+  // The backend swaps in `hls` + `poster` once MediaConvert completes.
   if (type === 'video') {
-    const posterFile = await captureVideoPoster(file);
-    if (posterFile) {
-      try {
-        const poster = await presignAndPut(presignURL, posterFile, base + '-poster.jpg');
-        return { type, src: key, poster, caption: '' };
-      } catch {
-        /* poster upload failed — fall through without it */
-      }
-    }
+    const key = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
+    return { type, src: key, original: key, processing: true, caption: '' };
   }
 
+  // Audio (and any image that couldn't be optimized, e.g. HEIC/GIF): upload as-is.
+  const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
   return { type, src: key, caption: '' };
 }

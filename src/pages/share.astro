@@ -59,6 +59,7 @@ const TURNSTILE_SITE_KEY =
       {TURNSTILE_SITE_KEY && <div class="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark"></div>}
 
       <button type="submit">Share this memory</button>
+      <div id="upload-progress" hidden></div>
       <p id="status" role="status" aria-live="polite"></p>
     </form>
   </main>
@@ -67,6 +68,7 @@ const TURNSTILE_SITE_KEY =
 
 <script>
   import { uploadOne } from '../lib/upload';
+  import { createUploadProgress } from '../lib/progress';
   // ── Capture backend ────────────────────────────────────────────────────────
   // Point these at your serverless endpoints when Phase 1 is wired up.
   //   PRESIGN_API → returns { url, key } for a direct-to-S3 upload
@@ -83,6 +85,7 @@ const TURNSTILE_SITE_KEY =
 
   const form = document.getElementById('memory-form') as HTMLFormElement;
   const statusEl = document.getElementById('status') as HTMLParagraphElement;
+  const progress = createUploadProgress(document.getElementById('upload-progress') as HTMLElement);
 
   // Memory dates can be any time in the past, but not the future. Cap the picker
   // at today (set at load so it's correct regardless of when the site was built).
@@ -178,9 +181,16 @@ const TURNSTILE_SITE_KEY =
           author: String(fd.get('name') || '').trim() || undefined,
           title: String(fd.get('title') || '').trim() || undefined,
         };
-        for (const file of Array.from(files)) {
-          setStatus(`Uploading ${file.name}…`);
-          media.push(await uploadOne(file, PRESIGN_API, ctx));
+        const fileArr = Array.from(files);
+        setStatus('Uploading…');
+        try {
+          for (let i = 0; i < fileArr.length; i++) {
+            const file = fileArr[i];
+            progress.start(file.name, i, fileArr.length);
+            media.push(await uploadOne(file, PRESIGN_API, ctx, (p) => progress.update(p)));
+          }
+        } finally {
+          progress.reset();
         }
       }
 

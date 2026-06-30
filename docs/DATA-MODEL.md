@@ -72,7 +72,19 @@ must stay in sync** — Zod is the law, this is the explanation.
   images the form generates a web-optimized JPEG (max 2000px, EXIF stripped,
   ~85% quality) at `src` and saves the unmodified upload at `original`. The
   site displays `src`; `original` exists for archival and "download original"
-  links. Stored under `/media/originals/` instead of `/media/u/`.
+  links. Stored under `/media/originals/` instead of `/media/u/`. For **video**,
+  the upload IS the master: it goes straight to `/media/originals/` and both
+  `src` and `original` point at it.
+- **Video transcoding fields** (`type: "video"`): on upload the master plays
+  progressively from `src` and the item is marked `processing: true`. The backend
+  runs AWS MediaConvert (see `docs/DEPLOY-MEDIACONVERT.md`) to produce:
+  - **`media[].hls`** — the adaptive HLS manifest (`…/index.m3u8`). When present,
+    players prefer it over `src` (native HLS on Safari/iOS, hls.js elsewhere,
+    progressive `src` as fallback).
+  - **`media[].poster`** — a server-generated JPEG thumbnail (replaces the old,
+    unreliable browser-side frame grab; works for every codec including HEVC).
+  - **`media[].processing`** — `true` only between submit and job completion;
+    removed once `hls` + `poster` are filled in (or on transcode error).
 - **`status: "hidden"`** — lets an admin pull a story from the public site
   without destroying the submission. The archive build skips hidden entries.
 

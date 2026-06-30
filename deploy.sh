@@ -81,8 +81,9 @@ fi
 #
 # CRITICAL: --delete removes bucket objects not present in dist/. The capture
 # backend writes submitted memories (entries/, data/) and uploaded media
-# (media/u/) straight to S3 — they are NOT part of the build — so they MUST be
-# excluded here, or every deploy would delete everyone's submissions.
+# (media/u/, media/originals/) straight to S3, and MediaConvert writes transcoded
+# video (media/hls/ — HLS renditions AND posters) — none of these are part of the
+# build, so they MUST be excluded here, or every deploy would delete them.
 echo "→ Uploading pages + media..."
 aws s3 sync dist "s3://$BUCKET" \
   --delete \
@@ -92,6 +93,7 @@ aws s3 sync dist "s3://$BUCKET" \
   --exclude "data/*" \
   --exclude "media/u/*" \
   --exclude "media/originals/*" \
+  --exclude "media/hls/*" \
   --cache-control "public, max-age=0, must-revalidate"
 
 # ── 3. Invalidate CloudFront ─────────────────────────────────────────────────

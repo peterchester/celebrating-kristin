@@ -39,6 +39,14 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional comma-separated sender allowlist for inbound email. Blank accepts anyone (SES spam/virus scan still applies).
+  MediaConvertEndpoint:
+    Type: String
+    Default: ''
+    Description: Optional MediaConvert account endpoint URL. Blank → the capture function discovers it at runtime (needs mediaconvert:DescribeEndpoints, which is granted below).
+  MediaConvertQueueArn:
+    Type: String
+    Default: ''
+    Description: Optional MediaConvert queue ARN. Blank → the account's default on-demand queue.
 
 Resources:
 
@@ -70,6 +78,9 @@ Resources:
           NOTIFY_FROM: !Ref NotifyFrom
           SITE_URL: !Ref SiteUrl
           EMAIL_ADDRESS: !Ref EmailAddress
+          MEDIACONVERT_ROLE_ARN: !GetAtt MediaConvertRole.Arn
+          MEDIACONVERT_ENDPOINT: !Ref MediaConvertEndpoint
+          MEDIACONVERT_QUEUE_ARN: !Ref MediaConvertQueueArn
       FunctionUrlConfig:
         AuthType: NONE
         Cors:
@@ -89,6 +100,73 @@ Resources:
             - Effect: Allow
               Action: [ses:SendEmail, ses:SendRawEmail]
               Resource: '*'
+        # Submit transcode jobs and pass the MediaConvert role to them.
+        - Statement:
+            - Effect: Allow
+              Action: [mediaconvert:CreateJob, mediaconvert:DescribeEndpoints]
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt MediaConvertRole.Arn
+
+  # ── Video transcoding (MediaConvert → HLS) ───────────────────────────────────
+  # Role MediaConvert assumes to read uploaded masters and write HLS renditions
+  # + posters back into the site bucket. Scoped to the two media prefixes.
+  MediaConvertRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: mediaconvert.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: site-media-rw
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Read any uploaded master: new uploads land in media/originals/,
+              # but pre-existing uploads (and the reprocess script) read from
+              # media/u/. All of media/ is already public via CloudFront, so a
+              # read grant across it is no extra exposure.
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub 'arn:aws:s3:::${SiteBucketName}/media/*'
+              - Effect: Allow
+                Action: [s3:PutObject]
+                Resource: !Sub 'arn:aws:s3:::${SiteBucketName}/media/hls/*'
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !Sub 'arn:aws:s3:::${SiteBucketName}'
+
+  # Invoked by EventBridge when a MediaConvert job finishes; patches the entry
+  # (or reflection) with the HLS manifest + poster, then rebuilds the index.
+  TranscodeCompleteFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: celebrate-kristin-transcode-complete
+      Runtime: nodejs20.x
+      Handler: handler.handler
+      CodeUri: capture/transcode-complete/
+      MemorySize: 256
+      Timeout: 60
+      Environment:
+        Variables:
+          SITE_BUCKET: !Ref SiteBucketName
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref SiteBucketName
+      Events:
+        JobDone:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: [aws.mediaconvert]
+              detail-type: ['MediaConvert Job State Change']
+              detail:
+                status: [COMPLETE, ERROR, CANCELED]
 
   # ── Inbound email (SES) ──────────────────────────────────────────────────────
   # Raw incoming emails land here (private, auto-expired). SES needs PutObject.
@@ -204,3 +282,6 @@ Outputs:
   ReceiptRuleSetName:
     Description: Activate this after deploy with `aws ses set-active-receipt-rule-set`
     Value: !Ref InboundRuleSet
+  MediaConvertRoleArn:
+    Description: Role ARN MediaConvert assumes (used by scripts/transcode-backfill.mjs)
+    Value: !GetAtt MediaConvertRole.Arn

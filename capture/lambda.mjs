@@ -19,13 +19,17 @@
 
 import {
   S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand,
-  DeleteObjectCommand, ListObjectsV2Command,
+  DeleteObjectCommand, DeleteObjectsCommand, ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
-const s3 = new S3Client({});
+// requestChecksumCalculation: 'WHEN_REQUIRED' stops the SDK from baking a default
+// CRC32 integrity checksum into presigned PUT URLs. A browser fetch() PUT can't
+// reproduce that checksum, so with the SDK default (WHEN_SUPPORTED) S3 rejects the
+// upload with 403. WHEN_REQUIRED omits it for PutObject, which doesn't need it.
+const s3 = new S3Client({ requestChecksumCalculation: 'WHEN_REQUIRED' });
 const ses = new SESClient({});
 const SITE = process.env.SITE_BUCKET;          // public bucket (entries + media)
 const PRIV = process.env.PRIVATE_BUCKET;       // private bucket (tokens + emails)
@@ -154,6 +158,69 @@ async function rebuildIndex() {
 const mediaKey = (src) =>
   typeof src === 'string' && src.startsWith('/media/') && !src.includes('..') ? src.slice(1) : null;
 
+// Delete every object under a key prefix (used to clear a video's media/hls/<vid>/
+// directory). No-op on a missing/empty prefix.
+async function deletePrefix(prefix) {
+  if (!prefix) return;
+  let token;
+  do {
+    const list = await s3.send(new ListObjectsV2Command({ Bucket: SITE, Prefix: prefix, ContinuationToken: token }));
+    const objs = (list.Contents || []).map((o) => ({ Key: o.Key }));
+    if (objs.length) await s3.send(new DeleteObjectsCommand({ Bucket: SITE, Delete: { Objects: objs } }));
+    token = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (token);
+}
+
+// Remove all S3 objects backing one media item: the file(s) it references plus,
+// for a transcoded video, the whole media/hls/<vid>/ output directory.
+async function deleteMediaObjects(m) {
+  for (const src of [m?.src, m?.original, m?.poster]) {
+    const k = mediaKey(src);
+    if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
+  }
+  const hlsKey = mediaKey(m?.hls); // e.g. media/hls/<vid>/index.m3u8
+  if (hlsKey) await deletePrefix(hlsKey.slice(0, hlsKey.lastIndexOf('/') + 1)).catch(() => {});
+}
+
+// Kick off a MediaConvert HLS job for every video in a freshly-stored entry or
+// reflection. Each video's master sits at media/originals/…; we mint a per-video
+// output id (vid) and tag the job (via UserMetadata) so the transcode-complete
+// Lambda can patch the right media item. Best-effort: a failed submission leaves
+// the clip playing progressively (processing stays true) instead of failing the
+// whole request.
+async function startTranscodes(media, meta) {
+  if (!Array.isArray(media) || !media.some((m) => m?.type === 'video')) return;
+
+  // Load the MediaConvert helper lazily and defensively: if its SDK client isn't
+  // available in the runtime, transcoding is skipped (videos still play
+  // progressively from src) rather than crashing the whole capture function.
+  let submitTranscode;
+  try {
+    ({ submitTranscode } = await import('./mediaconvert.mjs'));
+  } catch (e) {
+    console.error('MediaConvert unavailable — leaving videos un-transcoded', e);
+    return;
+  }
+
+  for (let i = 0; i < media.length; i++) {
+    const m = media[i];
+    if (m?.type !== 'video') continue;
+    const inputKey = mediaKey(m.src);
+    if (!inputKey) continue;
+    const vid = randomBytes(6).toString('hex');
+    try {
+      await submitTranscode({
+        bucket: SITE,
+        inputKey,
+        vid,
+        userMetadata: { ...meta, mediaIndex: String(i), vid },
+      });
+    } catch (e) {
+      console.error('transcode submit failed', e);
+    }
+  }
+}
+
 // Look up the memory author's email from the private contacts log (last wins).
 async function authorEmail(entryId) {
   const text = await getText(PRIV, CONTACTS, '');
@@ -240,10 +307,14 @@ export const handler = async (event) => {
       const prefix = kind === 'original' ? 'media/originals/' : 'media/u/';
       const key = `${prefix}${rand}-${base}${ext}`;
       // Sign only Content-Type (the browser sends it on PUT); CloudFront caches.
+      // 1-hour expiry, not 5 minutes: large video masters can take a while to
+      // upload, and the URL must stay valid for the whole transfer or S3 returns
+      // 403 (expired). Note: a single PUT still can't exceed S3's 5 GiB limit —
+      // the client rejects oversized files before requesting a URL.
       const url = await getSignedUrl(
         s3,
         new PutObjectCommand({ Bucket: SITE, Key: key, ContentType: contentType || 'application/octet-stream' }),
-        { expiresIn: 300 },
+        { expiresIn: 3600 },
       );
       return json(200, { url, key: `/${key}` });
     }
@@ -272,6 +343,9 @@ export const handler = async (event) => {
         const prev = await getText(PRIV, CONTACTS, '');
         await putText(PRIV, CONTACTS, prev + JSON.stringify({ id, name: s.author.name, email }) + '\n');
       }
+
+      // Transcode any videos to HLS (best-effort; completion patches the entry).
+      await startTranscodes(entry.media, { kind: 'entry', entryId: id });
 
       await rebuildIndex();
       return json(200, { ok: true, id, editToken });
@@ -304,12 +378,7 @@ export const handler = async (event) => {
 
       const entry = await getJson(SITE, `${ENTRIES}${id}.json`, null);
       await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: `${ENTRIES}${id}.json` })).catch(() => {});
-      for (const m of entry?.media ?? []) {
-        for (const src of [m.src, m.original, m.poster]) {
-          const k = mediaKey(src);
-          if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
-        }
-      }
+      for (const m of entry?.media ?? []) await deleteMediaObjects(m);
       const tokens = await loadTokens();
       delete tokens[id];
       await saveTokens(tokens);
@@ -339,6 +408,9 @@ export const handler = async (event) => {
       list.push(reflection);
       await putJson(SITE, key, list);
 
+      // Transcode any videos in the reflection; completion patches this comment.
+      await startTranscodes(reflection.media, { kind: 'comment', entryId: s.entryId, commentId });
+
       const editToken = randomBytes(16).toString('hex');
       const tokens = await loadTokens();
       tokens[`comment:${commentId}`] = sha(editToken);
@@ -359,12 +431,7 @@ export const handler = async (event) => {
       const list = await getJson(SITE, key, []);
       const gone = list.find((c) => c.id === commentId);
       await putJson(SITE, key, list.filter((c) => c.id !== commentId));
-      for (const m of gone?.media ?? []) {
-        for (const src of [m.src, m.original, m.poster]) {
-          const k = mediaKey(src);
-          if (k) await s3.send(new DeleteObjectCommand({ Bucket: SITE, Key: k })).catch(() => {});
-        }
-      }
+      for (const m of gone?.media ?? []) await deleteMediaObjects(m);
       const tokens = await loadTokens();
       delete tokens[`comment:${commentId}`];
       await saveTokens(tokens);

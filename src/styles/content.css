@@ -4,6 +4,20 @@
    markup produced by src/lib/render.ts picks them up. Namespaced under .card /
    .media / .entry / .post-banner so nothing collides. */
 
+/* ── Upload progress bar ──────────────────────────────────────────────────────
+   Rendered by src/lib/progress.ts into #upload-progress (share form) and
+   #rf-upload-progress (reflection form). Global because JS-injected nodes don't
+   pick up Astro-scoped styles. */
+.upload-progress { margin: 0.5rem 0 0.25rem; font-family: -apple-system, system-ui, sans-serif; }
+.upload-progress[hidden] { display: none; }
+.upload-progress .up-row { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; font-size: 0.9rem; }
+.upload-progress .up-label { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-progress .up-pct { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+.upload-progress .up-track { height: 8px; margin: 0.4rem 0 0.3rem; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden; }
+.upload-progress .up-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(120deg, #7ee8c9, #8fd0f0); transition: width 0.2s ease; }
+.upload-progress .up-meta { color: var(--soft); font-size: 0.82rem; min-height: 1em; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .upload-progress .up-fill { transition: none; } }
+
 /* ── Gallery card ─────────────────────────────────────────────────────────── */
 .card {
   display: block;

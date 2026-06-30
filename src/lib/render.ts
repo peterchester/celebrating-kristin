@@ -6,9 +6,24 @@
 export interface MediaItem {
   type: 'image' | 'audio' | 'video';
   src: string;
+  hls?: string; // video only: adaptive HLS manifest; preferred over src when present
   poster?: string;
   caption?: string;
   alt?: string;
+}
+
+// Build the markup for a playable <video>. When an HLS manifest exists we emit a
+// posterless src-less shell carrying data-hls (+ data-mp4 fallback); attachHls()
+// (src/lib/hls.ts) wires up native HLS or hls.js after it's in the DOM. Without a
+// manifest (still processing, or a legacy entry) we fall back to a plain
+// progressive <video src>. The whole post is rendered by JS anyway, so requiring
+// JS to start playback is consistent with the rest of the page.
+function videoTag(m: MediaItem, extraAttrs = ''): string {
+  const poster = m.poster ? ` poster="${esc(m.poster)}"` : '';
+  const common = `controls playsinline preload="metadata"${poster}${extraAttrs ? ' ' + extraAttrs : ''}`;
+  return m.hls
+    ? `<video data-hls="${esc(m.hls)}" data-mp4="${esc(m.src)}" ${common}></video>`
+    : `<video src="${esc(m.src)}" ${common}></video>`;
 }
 export interface Entry {
   id: string;
@@ -152,8 +167,7 @@ export function mediaHTML(m: MediaItem): string {
   let inner = '';
   if (m.type === 'image') inner = `<img src="${esc(m.src)}" alt="${esc(m.alt ?? m.caption ?? '')}" loading="lazy" />`;
   else if (m.type === 'audio') inner = `<audio controls preload="none" src="${esc(m.src)}"></audio>`;
-  else if (m.type === 'video')
-    inner = `<video controls preload="metadata" playsinline src="${esc(m.src)}"${m.poster ? ` poster="${esc(m.poster)}"` : ''}></video>`;
+  else if (m.type === 'video') inner = videoTag(m);
   const cap = m.caption ? `<figcaption>${esc(m.caption)}</figcaption>` : '';
   return `<figure class="media">${inner}${cap}</figure>`;
 }
@@ -193,7 +207,7 @@ export function bannerHTML(entry: Entry, inlineLead = false): string {
   const m =
     lead.type === 'image'
       ? `<img src="${esc(lead.src)}" alt="${esc(lead.alt ?? lead.caption ?? '')}" />`
-      : `<video src="${esc(lead.src)}"${lead.poster ? ` poster="${esc(lead.poster)}"` : ''} controls playsinline preload="metadata"></video>`;
+      : videoTag(lead);
   const cap = lead.caption ? `<p class="banner-caption">${esc(lead.caption)}</p>` : '';
   return `<div class="post-banner">${m}${cap}</div>`;
 }
