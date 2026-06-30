@@ -114,11 +114,23 @@ async function presignAndPut(
   return key;
 }
 
+// S3 rejects a single PUT larger than 5 GiB — files that big need multipart
+// upload, which this direct-to-S3 flow doesn't do. Stop early with a clear
+// message instead of uploading for ages and then getting a cryptic 403.
+const S3_MAX_PUT = 5 * 1024 * 1024 * 1024;
+
 export async function uploadOne(
   file: File,
   presignURL: string,
   ctx?: { author?: string; title?: string },
 ): Promise<UploadedMedia> {
+  if (file.size > S3_MAX_PUT) {
+    throw new Error(
+      `"${file.name}" is ${(file.size / 1e9).toFixed(1)} GB — too large to upload here ` +
+        `(the limit is about 5 GB). Please ask the site owner to add it directly.`,
+    );
+  }
+
   // Build the identifying base from author + title (or fall back to the file's
   // original name) so archived keys are human-readable.
   const originalBase = file.name.replace(/\.[^.]+$/, '');

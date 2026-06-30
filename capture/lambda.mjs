@@ -25,7 +25,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 
-const s3 = new S3Client({});
+// requestChecksumCalculation: 'WHEN_REQUIRED' stops the SDK from baking a default
+// CRC32 integrity checksum into presigned PUT URLs. A browser fetch() PUT can't
+// reproduce that checksum, so with the SDK default (WHEN_SUPPORTED) S3 rejects the
+// upload with 403. WHEN_REQUIRED omits it for PutObject, which doesn't need it.
+const s3 = new S3Client({ requestChecksumCalculation: 'WHEN_REQUIRED' });
 const ses = new SESClient({});
 const SITE = process.env.SITE_BUCKET;          // public bucket (entries + media)
 const PRIV = process.env.PRIVATE_BUCKET;       // private bucket (tokens + emails)
@@ -303,10 +307,14 @@ export const handler = async (event) => {
       const prefix = kind === 'original' ? 'media/originals/' : 'media/u/';
       const key = `${prefix}${rand}-${base}${ext}`;
       // Sign only Content-Type (the browser sends it on PUT); CloudFront caches.
+      // 1-hour expiry, not 5 minutes: large video masters can take a while to
+      // upload, and the URL must stay valid for the whole transfer or S3 returns
+      // 403 (expired). Note: a single PUT still can't exceed S3's 5 GiB limit —
+      // the client rejects oversized files before requesting a URL.
       const url = await getSignedUrl(
         s3,
         new PutObjectCommand({ Bucket: SITE, Key: key, ContentType: contentType || 'application/octet-stream' }),
-        { expiresIn: 300 },
+        { expiresIn: 3600 },
       );
       return json(200, { url, key: `/${key}` });
     }
