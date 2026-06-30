@@ -59,6 +59,7 @@ const TURNSTILE_SITE_KEY =
           <input name="media" type="file" multiple accept="image/*,audio/*,video/*" />
         </label>
         {TURNSTILE_SITE_KEY && <div class="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark"></div>}
+        <div id="rf-upload-progress" hidden></div>
         <button type="submit">Add reflection</button>
         <p id="rf-status" role="status" aria-live="polite"></p>
       </form>
@@ -84,6 +85,7 @@ const TURNSTILE_SITE_KEY =
   import { openGallery, attachThumbs, imageItems, isLightboxOpen } from '../../lib/lightbox';
   import { uploadOne } from '../../lib/upload';
   import { attachHls } from '../../lib/hls';
+  import { createUploadProgress } from '../../lib/progress';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
   // JSON. API base: explicit PUBLIC_API_BASE, else derived from PUBLIC_SUBMIT_API.
@@ -247,6 +249,7 @@ const TURNSTILE_SITE_KEY =
     const statusEl = document.getElementById('rf-status') as HTMLElement | null;
     if (!section || !listEl || !form || !statusEl) return;
     section.hidden = false;
+    const rfProgress = createUploadProgress(document.getElementById('rf-upload-progress') as HTMLElement);
 
     const adminToken = cookie('rk_admin');
     const owned = () => { try { return JSON.parse(cookie('rk_owner') || '[]'); } catch { return []; } };
@@ -309,7 +312,17 @@ const TURNSTILE_SITE_KEY =
           // For reflections we have no title; the parent memory's slug is the
           // closest equivalent, and gives the file useful archive context.
           const ctx = { author: String(fd.get('name') || '').trim() || undefined, title: id || undefined };
-          for (const file of Array.from(files)) { statusEl!.textContent = 'Uploading ' + file.name + '…'; media.push(await uploadOne(file, PRESIGN, ctx)); }
+          const fileArr = Array.from(files);
+          statusEl!.textContent = 'Uploading…';
+          try {
+            for (let i = 0; i < fileArr.length; i++) {
+              const file = fileArr[i];
+              rfProgress.start(file.name, i, fileArr.length);
+              media.push(await uploadOne(file, PRESIGN, ctx, (p) => rfProgress.update(p)));
+            }
+          } finally {
+            rfProgress.reset();
+          }
         }
         const payload = {
           entryId: id,

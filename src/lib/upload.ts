@@ -91,11 +91,44 @@ async function optimizeImage(file: File): Promise<File | null> {
   }
 }
 
+export interface UploadProgress {
+  loaded: number; // bytes sent so far
+  total: number; // total bytes
+  fraction: number; // 0..1
+}
+export type OnUploadProgress = (p: UploadProgress) => void;
+
+// PUT the file to S3 with progress reporting. We use XMLHttpRequest rather than
+// fetch because fetch can't report upload (request-body) progress — essential
+// feedback for the multi-GB video masters. Resolves on a 2xx, rejects otherwise.
+function putWithProgress(url: string, file: File, onProgress?: OnUploadProgress): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.setRequestHeader('content-type', file.type);
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress({ loaded: e.loaded, total: e.total, fraction: e.total ? e.loaded / e.total : 0 });
+        }
+      };
+    }
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Upload failed for ${file.name} (HTTP ${xhr.status})`));
+    xhr.onerror = () => reject(new Error('Upload failed for ' + file.name));
+    xhr.onabort = () => reject(new Error('Upload canceled for ' + file.name));
+    xhr.send(file);
+  });
+}
+
 async function presignAndPut(
   presignURL: string,
   file: File,
   filename: string,
   kind?: 'original',
+  onProgress?: OnUploadProgress,
 ): Promise<string> {
   const res = await fetch(presignURL, {
     method: 'POST',
@@ -109,8 +142,7 @@ async function presignAndPut(
   });
   if (!res.ok) throw new Error('Could not get upload URL');
   const { url, key } = await res.json();
-  const put = await fetch(url, { method: 'PUT', headers: { 'content-type': file.type }, body: file });
-  if (!put.ok) throw new Error('Upload failed for ' + file.name);
+  await putWithProgress(url, file, onProgress);
   return key;
 }
 
@@ -123,6 +155,7 @@ export async function uploadOne(
   file: File,
   presignURL: string,
   ctx?: { author?: string; title?: string },
+  onProgress?: OnUploadProgress,
 ): Promise<UploadedMedia> {
   if (file.size > S3_MAX_PUT) {
     throw new Error(
@@ -145,7 +178,8 @@ export async function uploadOne(
   if (optimized) {
     let originalKey: string | undefined;
     try {
-      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original');
+      // The original is the larger upload — report progress on it.
+      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
     } catch {
       originalKey = undefined;
     }
@@ -163,11 +197,11 @@ export async function uploadOne(
   // progressively right away; `processing` tells the UI a transcode is pending.
   // The backend swaps in `hls` + `poster` once MediaConvert completes.
   if (type === 'video') {
-    const key = await presignAndPut(presignURL, file, base + origExt, 'original');
+    const key = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
     return { type, src: key, original: key, processing: true, caption: '' };
   }
 
   // Audio (and any image that couldn't be optimized, e.g. HEIC/GIF): upload as-is.
-  const key = await presignAndPut(presignURL, file, base + origExt);
+  const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
   return { type, src: key, caption: '' };
 }
