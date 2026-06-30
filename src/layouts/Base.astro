@@ -106,7 +106,9 @@ const hideShareButton = fp === '/share' || fp === '/memory' || fp === '/together
         font-family: -apple-system, system-ui, sans-serif; font-size: .95rem; font-weight: 600;
         padding: .7rem 1.5rem; color: #08111f;
         background: linear-gradient(120deg, #7ee8c9, #8fd0f0);
-        box-shadow: 0 2px 18px rgba(120, 230, 200, 0.35);
+        /* Soft mint glow + a darker drop shadow beneath so the bar lifts off
+           the page content scrolling under it. */
+        box-shadow: 0 2px 18px rgba(120, 230, 200, 0.35), 0 6px 16px rgba(0, 0, 0, 0.38);
       }
       .alert-bar::after { content: ' →'; opacity: .8; }
       .alert-bar:hover { filter: brightness(1.04); }
