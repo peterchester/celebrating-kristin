@@ -127,9 +127,13 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # Read any uploaded master: new uploads land in media/originals/,
+              # but pre-existing uploads (and the reprocess script) read from
+              # media/u/. All of media/ is already public via CloudFront, so a
+              # read grant across it is no extra exposure.
               - Effect: Allow
                 Action: [s3:GetObject]
-                Resource: !Sub 'arn:aws:s3:::${SiteBucketName}/media/originals/*'
+                Resource: !Sub 'arn:aws:s3:::${SiteBucketName}/media/*'
               - Effect: Allow
                 Action: [s3:PutObject]
                 Resource: !Sub 'arn:aws:s3:::${SiteBucketName}/media/hls/*'

@@ -50,7 +50,20 @@ This doc is the checklist for whoever runs the AWS deploy.
    and pass it as the `MediaConvertEndpoint` parameter (and/or
    `MediaConvertQueueArn` for a non-default queue) in `.deploy.env`.
 
-5. **Backfill the existing videos** (one-time). With AWS credentials:
+5. **Reprocess videos already on the live site** (one-time). Upgrades existing
+   memories that were uploaded before this feature so they get HLS + a poster
+   too. Run AFTER the backend deploy (it relies on the completion Lambda):
+   ```
+   BUCKET=<site-bucket> node scripts/transcode-reprocess.mjs --dry-run  # preview
+   BUCKET=<site-bucket> node scripts/transcode-reprocess.mjs            # do it
+   ```
+   It scans `entries/` + `comments/` in S3 and submits a transcode job for every
+   video missing `hls`. The completion Lambda patches each entry in place as its
+   job finishes. Idempotent (already-HLS videos are skipped); don't re-run while a
+   batch is still transcoding.
+
+6. **Backfill your local archive videos** (one-time, optional). For master files
+   you have on disk that aren't on the site yet — creates new memory entries:
    ```
    mkdir backfill-videos          # add your master files here
    # optional: backfill-videos/manifest.json for per-file title/author/date
