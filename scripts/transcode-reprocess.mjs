@@ -26,7 +26,7 @@ import { writeFile, mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { jobSettings } from '../capture/mediaconvert.mjs';
+import { jobSettings } from '../capture/job-settings.mjs';
 
 const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
 const BUCKET = process.env.BUCKET || '';

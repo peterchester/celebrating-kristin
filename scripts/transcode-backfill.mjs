@@ -29,7 +29,7 @@ import { existsSync } from 'node:fs';
 import { join, extname, basename, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { jobSettings } from '../capture/mediaconvert.mjs';
+import { jobSettings } from '../capture/job-settings.mjs';
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname);
 const VIDEO_DIR = process.env.VIDEO_DIR || join(ROOT, 'backfill-videos');

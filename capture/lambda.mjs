@@ -24,7 +24,6 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { submitTranscode } from './mediaconvert.mjs';
 
 const s3 = new S3Client({});
 const ses = new SESClient({});
@@ -186,7 +185,19 @@ async function deleteMediaObjects(m) {
 // the clip playing progressively (processing stays true) instead of failing the
 // whole request.
 async function startTranscodes(media, meta) {
-  if (!Array.isArray(media)) return;
+  if (!Array.isArray(media) || !media.some((m) => m?.type === 'video')) return;
+
+  // Load the MediaConvert helper lazily and defensively: if its SDK client isn't
+  // available in the runtime, transcoding is skipped (videos still play
+  // progressively from src) rather than crashing the whole capture function.
+  let submitTranscode;
+  try {
+    ({ submitTranscode } = await import('./mediaconvert.mjs'));
+  } catch (e) {
+    console.error('MediaConvert unavailable — leaving videos un-transcoded', e);
+    return;
+  }
+
   for (let i = 0; i < media.length; i++) {
     const m = media[i];
     if (m?.type !== 'video') continue;
