@@ -89,8 +89,9 @@ must stay in sync** — Zod is the law, this is the explanation.
     removed once `hls` + `poster` are filled in (or on transcode error).
 - **Audio cover** (`type: "audio"`): an audio item may also carry a
   **`media[].poster`** — an owner-set cover image (uploaded from the edit form).
-  When present it replaces the waveform on the gallery card and becomes the post
-  banner. Optional; audio posts without one fall back to the waveform mark.
+  When present it replaces the waveform on the gallery card and leads the post
+  at content-column width (above the title). Optional; audio posts without one
+  fall back to the waveform mark.
 - **`status: "hidden"`** — lets an admin pull a story from the public site
   without destroying the submission. The archive build skips hidden entries.
 

@@ -279,30 +279,22 @@ export function shouldInlineLeadImage(width: number, height: number): boolean {
 // or a tall/low-res image lead (inlineLead) — stays inline above the text
 // instead. Remaining media follow the body. `inlineLead` is set by the caller
 // after measuring the lead image (see shouldInlineLeadImage).
-// Which lead media becomes the full-bleed banner: a video, a non-demoted image,
-// or an audio clip that carries a custom poster (its cover art). An audio lead
-// without a poster stays inline (its player leads the body instead).
+// Which lead media becomes the full-bleed banner: a video, or a non-demoted
+// image. An audio lead never banners — its cover art (if any) instead leads the
+// content column at normal width (see postContentHTML).
 function isBannerLead(lead: MediaItem | undefined, inlineLead: boolean): boolean {
   if (!lead) return false;
-  return (
-    lead.type === 'video' ||
-    (lead.type === 'image' && !inlineLead) ||
-    (lead.type === 'audio' && !!lead.poster)
-  );
+  return lead.type === 'video' || (lead.type === 'image' && !inlineLead);
 }
 
 export function bannerHTML(entry: Entry, inlineLead = false): string {
   const lead = (entry.media ?? [])[0];
   if (!isBannerLead(lead, inlineLead)) return '';
   const l = lead as MediaItem;
-  // An audio poster is a plain cover image; mark it .banner-poster so the photo
-  // lightbox wiring can skip it (it isn't one of the post's photos).
   const m =
     l.type === 'image'
       ? `<img src="${esc(l.src)}" alt="${esc(l.alt ?? l.caption ?? '')}" />`
-      : l.type === 'audio'
-        ? `<img class="banner-poster" src="${esc(l.poster)}" alt="${esc(l.alt ?? l.caption ?? '')}" />`
-        : videoTag(l);
+      : videoTag(l);
   const cap = l.caption ? `<p class="banner-caption">${esc(l.caption)}</p>` : '';
   return `<div class="post-banner">${m}${cap}</div>`;
 }
@@ -327,11 +319,17 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   // above the title — keeping the "photo at the top" feel, just rendered inline
   // and uncropped like any other body image rather than as a full-bleed banner.
   if (!hasBanner && lead?.type === 'image') html += mediaHTML(lead);
+  // An audio post's cover art leads the column at content width (never a
+  // full-bleed banner). Marked .poster-lead so the photo lightbox skips it — it's
+  // decorative cover art, not one of the post's photos.
+  if (lead?.type === 'audio' && lead.poster) {
+    html += `<figure class="media audio-poster"><img class="poster-lead" src="${esc(lead.poster)}" alt="${esc(lead.alt ?? lead.caption ?? '')}" /></figure>`;
+  }
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
   html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
-  // Audio always plays under the byline, even when a poster is shown as a banner
-  // above: a playlist when there are several clips, or a single bare player for
-  // one lead clip. (The poster only appears as cover art; the player stays here.)
+  // Audio always plays under the byline: a playlist when there are several clips,
+  // or a single bare player for one lead clip. (Any cover art shows above the
+  // title; the player stays here.)
   if (isPlaylist) html += audioPlaylistHTML(audioItems);
   else if (lead?.type === 'audio') html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${paragraphHTML(p)}</p>`).join('')}</article>`;

@@ -449,10 +449,10 @@ const TURNSTILE_SITE_KEY =
     // DOM <img>s line up index-for-index with the gallery items.
     const postPhotos = imageItems(entry.media);
     const postImgs = [
-      // Skip an audio post's poster banner (.banner-poster) — it's cover art,
-      // not one of the post's photos, so it must not shift the gallery indices.
-      ...document.querySelectorAll('#post-banner img:not(.banner-poster)'),
-      ...document.querySelectorAll('#post-content .media img'),
+      ...document.querySelectorAll('#post-banner img'),
+      // Skip an audio post's cover art (.poster-lead) — it's decorative, not one
+      // of the post's photos, so it must not shift the gallery indices.
+      ...document.querySelectorAll('#post-content .media img:not(.poster-lead)'),
     ] as HTMLImageElement[];
     attachThumbs(postImgs, postPhotos);
 

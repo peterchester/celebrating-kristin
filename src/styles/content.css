@@ -120,6 +120,9 @@
 }
 .media audio { width: 100%; }
 .media figcaption { color: var(--soft); font-size: 0.9rem; font-style: italic; margin-top: 0.5rem; text-align: center; }
+/* An audio post's cover art leads the column like a normal image, capped so a
+   tall poster doesn't dominate; object-fit avoids distortion when the cap bites. */
+.audio-poster img { max-height: 440px; object-fit: cover; }
 
 /* ── Multi-track audio playlist ───────────────────────────────────────────────
    One dark-themed card: a custom transport bar (play/pause, now-playing title,
