@@ -22,6 +22,8 @@
 const MAX_DIM = 2000;
 const JPEG_QUALITY = 0.85;
 
+import { readAudioTags } from './id3';
+
 export interface UploadedMedia {
   type: 'image' | 'audio' | 'video';
   src: string;
@@ -29,6 +31,8 @@ export interface UploadedMedia {
   hls?: string; // video only: set by the backend after transcoding, not at upload time
   processing?: boolean; // video only: true until the backend finishes transcoding
   poster?: string; // video only: server-generated cover/poster (added after transcoding)
+  title?: string; // audio only: track title from ID3 tags (used to label the playlist)
+  artist?: string; // audio only: track artist from ID3 tags
   caption: string;
 }
 
@@ -168,7 +172,12 @@ export async function uploadOne(
   // original name) so archived keys are human-readable.
   const originalBase = file.name.replace(/\.[^.]+$/, '');
   const origExt = (file.name.match(/\.[^.]+$/) || [''])[0] || '';
-  const base = composeBase(ctx, originalBase);
+  // Audio keys are built from the file's OWN name, not the memory title: several
+  // tracks share one post (and one title), so a title-based key would make them
+  // near-identical. Keeping each filename in the key gives the playlist a
+  // distinct, human-readable fallback label when a track carries no ID3 title.
+  const isAudio = file.type.startsWith('audio/');
+  const base = composeBase(isAudio ? undefined : ctx, originalBase);
 
   // Try to web-optimize. If we got an optimized version, upload the ORIGINAL
   // into media/originals/ and the optimized into media/u/. If optimization
@@ -201,7 +210,21 @@ export async function uploadOne(
     return { type, src: key, original: key, processing: true, caption: '' };
   }
 
-  // Audio (and any image that couldn't be optimized, e.g. HEIC/GIF): upload as-is.
+  // Audio: read the ID3 title/artist (best-effort, no dependency) so the player
+  // can label the track, then upload the file as-is (no optimization/poster).
+  if (type === 'audio') {
+    const tags = await readAudioTags(file);
+    const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
+    return {
+      type,
+      src: key,
+      caption: '',
+      ...(tags.title ? { title: tags.title } : {}),
+      ...(tags.artist ? { artist: tags.artist } : {}),
+    };
+  }
+
+  // Any image that couldn't be optimized (e.g. HEIC/GIF): upload as-is.
   const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
   return { type, src: key, caption: '' };
 }

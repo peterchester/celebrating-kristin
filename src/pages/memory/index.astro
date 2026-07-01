@@ -96,6 +96,7 @@ const TURNSTILE_SITE_KEY =
   import { openGallery, attachThumbs, imageItems, isLightboxOpen } from '../../lib/lightbox';
   import { uploadOne, uploadPoster } from '../../lib/upload';
   import { attachHls } from '../../lib/hls';
+  import { attachAudioPlaylist } from '../../lib/audio';
   import { createUploadProgress } from '../../lib/progress';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
@@ -437,6 +438,7 @@ const TURNSTILE_SITE_KEY =
     if (bannerEl) bannerEl.innerHTML = bannerHTML(entry, inlineLead);
     if (contentEl) contentEl.innerHTML = postContentHTML(entry, inlineLead);
     attachHls(document); // wire up any HLS videos just injected (banner + body)
+    attachAudioPlaylist(document); // wire up a multi-track audio playlist, if present
 
     // Make the post's photos open a full-screen gallery. Banner image (if any)
     // comes first, then body images — the same order as the photo media, so the

@@ -8,6 +8,8 @@ export interface MediaItem {
   src: string;
   hls?: string; // video only: adaptive HLS manifest; preferred over src when present
   poster?: string;
+  title?: string; // audio only: track title (ID3), shown in a multi-track playlist
+  artist?: string; // audio only: track artist (ID3)
   caption?: string;
   alt?: string;
 }
@@ -162,6 +164,55 @@ export function cardHTML(entry: Entry): string {
   );
 }
 
+// A display label for one audio track: its ID3 title when tagged, otherwise a
+// human-readable name recovered from the upload key. Backend keys are always
+// "<6-char random hash>-<slug>.<ext>" (see the presign handler in
+// capture/lambda.mjs), so drop that leading hash token and the extension, then
+// de-slug the rest. This guarantees distinct labels even for a batch of untagged
+// files sharing one post.
+function audioTitle(m: MediaItem): string {
+  if (m.title && m.title.trim()) return m.title.trim();
+  const file = (m.src.split('/').pop() || m.src).replace(/\.[^.]+$/, '');
+  const named = file.replace(/^[a-z0-9]{6}-(?=.)/i, '');
+  const words = named.replace(/[-_]+/g, ' ').trim();
+  return words ? words.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Audio';
+}
+
+// ── Multi-track audio playlist ───────────────────────────────────────────────
+// Group a post's audio attachments into ONE shared player above a labeled track
+// list. Each row is a play button (whole row switches the track) plus an
+// always-visible native download link (<a download> — preserves saving the
+// original file; works well on Android, and a long-press saves to Files on iOS).
+// The markup ships without a chosen source; attachAudioPlaylist() (src/lib/audio.ts)
+// loads the first track and wires row clicks + auto-advance once it's in the DOM.
+export function audioPlaylistHTML(items: MediaItem[]): string {
+  const playSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>`;
+  const dlSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10m0 0l-4-4m4 4l4-4M5 20h14" /></svg>`;
+  const rows = items
+    .map((m, i) => {
+      const label = audioTitle(m);
+      const sub = (m.artist && m.artist.trim()) || m.caption || '';
+      const subHTML = sub ? `<span class="track-sub">${esc(sub)}</span>` : '';
+      return (
+        `<li class="track" data-track data-src="${esc(m.src)}">` +
+        `<button type="button" class="track-play" data-play>` +
+        `<span class="track-num" aria-hidden="true">${i + 1}</span>` +
+        `<span class="track-icon" aria-hidden="true">${playSvg}</span>` +
+        `<span class="track-meta"><span class="track-title">${esc(label)}</span>${subHTML}</span>` +
+        `</button>` +
+        `<a class="track-dl" href="${esc(m.src)}" download aria-label="Download ${esc(label)}">${dlSvg}</a>` +
+        `</li>`
+      );
+    })
+    .join('');
+  return (
+    `<figure class="media audio-playlist" data-audio-playlist>` +
+    `<audio controls preload="none"></audio>` +
+    `<ol class="tracks">${rows}</ol>` +
+    `</figure>`
+  );
+}
+
 // ── A single media attachment (mirrors Media.astro) ──────────────────────────
 export function mediaHTML(m: MediaItem): string {
   let inner = '';
@@ -218,6 +269,10 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   // Mirror bannerHTML: an inlined image lead is NOT a banner, so it falls
   // through to the inline render below alongside audio leads.
   const hasBanner = !!lead && (lead.type === 'video' || (lead.type === 'image' && !inlineLead));
+  // Two or more audio clips collapse into a single playlist (rendered once,
+  // under the byline). A lone clip keeps the bare inline player it's always had.
+  const audioItems = media.filter((m) => m.type === 'audio');
+  const isPlaylist = audioItems.length >= 2;
   const paragraphs = (entry.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const dl = dateLabel(entry.memoryDate);
   const rel = entry.author.relationship ? `<span> · Kristin's ${esc(entry.author.relationship.toLowerCase())}</span>` : '';
@@ -230,10 +285,15 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   if (!hasBanner && lead?.type === 'image') html += mediaHTML(lead);
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
   html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
-  // An audio lead stays inline just under the byline (no banner for audio).
-  if (!hasBanner && lead?.type === 'audio') html += mediaHTML(lead);
+  // Audio sits inline just under the byline (no banner for audio): a playlist
+  // when there are several, or a single bare player for one lead clip.
+  if (isPlaylist) html += audioPlaylistHTML(audioItems);
+  else if (!hasBanner && lead?.type === 'audio') html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</article>`;
-  html += media.slice(1).map(mediaHTML).join('');
+  // Trailing media after the body. When the audio became a playlist it's already
+  // rendered above, so drop the audio items from the inline flow.
+  const trailing = media.slice(1).filter((m) => !(isPlaylist && m.type === 'audio'));
+  html += trailing.map(mediaHTML).join('');
   return html;
 }
 

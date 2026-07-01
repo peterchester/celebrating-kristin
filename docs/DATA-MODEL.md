@@ -38,6 +38,8 @@ Ordering ("most recent") comes from the `submittedAt` field, not the filename.
       "src": "/media/2026-06-14-jane-doe-big-sur/sunset.jpg",
       "caption": "Pfeiffer Beach, summer '98",  // optional
       "alt": "Orange sky over a rocky beach"      // optional, images only
+      // audio only: "title" / "artist" — ID3 tags read at upload; 2+ audio
+      // clips in one post render as a playlist labeled by these (or filename).
     }
   ],
   "submittedAt": "2026-06-14T18:32:00Z", // ISO 8601 UTC — sorting only, never shown

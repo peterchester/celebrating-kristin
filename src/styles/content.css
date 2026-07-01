@@ -121,6 +121,52 @@
 .media audio { width: 100%; }
 .media figcaption { color: var(--soft); font-size: 0.9rem; font-style: italic; margin-top: 0.5rem; text-align: center; }
 
+/* ── Multi-track audio playlist ───────────────────────────────────────────────
+   One shared <audio> above a labeled track list. Each row is a full-width play
+   button plus a small, always-visible download link. Wiring: src/lib/audio.ts. */
+.audio-playlist audio { width: 100%; }
+.audio-playlist .tracks {
+  list-style: none; margin: 0.6rem 0 0; padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; overflow: hidden;
+}
+.audio-playlist .track {
+  display: flex; align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+.audio-playlist .track:first-child { border-top: 0; }
+.audio-playlist .track-play {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.6rem 0.5rem 0.6rem 0.8rem;
+  background: none; border: 0; cursor: pointer; text-align: left; font: inherit; color: inherit;
+}
+.audio-playlist .track-num {
+  width: 1.5rem; flex: none; text-align: right;
+  color: var(--soft); font-size: 0.85rem; font-variant-numeric: tabular-nums;
+}
+/* The play icon replaces the track number on the currently-loaded row. */
+.audio-playlist .track-icon { display: none; width: 1.5rem; flex: none; }
+.audio-playlist .track-icon svg { width: 15px; height: 15px; fill: var(--accent-2); }
+.audio-playlist .track.playing .track-num { display: none; }
+.audio-playlist .track.playing .track-icon { display: grid; place-items: center; }
+.audio-playlist .track.playing { background: rgba(126, 232, 201, 0.16); }
+.audio-playlist .track-meta { display: flex; flex-direction: column; min-width: 0; }
+.audio-playlist .track-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audio-playlist .track-sub {
+  color: var(--soft); font-size: 0.82rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.audio-playlist .track-dl {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; margin-right: 0.15rem;
+  color: var(--soft); border-radius: 6px;
+}
+.audio-playlist .track-dl svg {
+  width: 18px; height: 18px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.audio-playlist .track-dl:hover { color: var(--accent-2); background: rgba(255, 255, 255, 0.08); }
+
 /* ── Single-post body ─────────────────────────────────────────────────────── */
 .post-banner { width: 100%; line-height: 0; }
 /* Images: show the whole image at natural proportions; a large max-height only
