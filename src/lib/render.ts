@@ -179,14 +179,18 @@ function audioTitle(m: MediaItem): string {
 }
 
 // ── Multi-track audio playlist ───────────────────────────────────────────────
-// Group a post's audio attachments into ONE shared player above a labeled track
-// list. Each row is a play button (whole row switches the track) plus an
+// Group a post's audio attachments into ONE dark-themed player that reads as a
+// single card: a custom transport bar (play/pause, now-playing title, seek,
+// time) sits above a labeled track list, sharing the same surface. We drive a
+// controls-less <audio> ourselves rather than showing the native player, whose
+// light OS chrome never blends with the dark card. Each row keeps an
 // always-visible native download link (<a download> — preserves saving the
-// original file; works well on Android, and a long-press saves to Files on iOS).
+// original file; works on Android, and a long-press saves to Files on iOS).
 // The markup ships without a chosen source; attachAudioPlaylist() (src/lib/audio.ts)
-// loads the first track and wires row clicks + auto-advance once it's in the DOM.
+// loads the first track and wires the transport + rows once it's in the DOM.
 export function audioPlaylistHTML(items: MediaItem[]): string {
-  const playSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>`;
+  const playSvg = `<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>`;
+  const pauseSvg = `<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" /></svg>`;
   const dlSvg = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10m0 0l-4-4m4 4l4-4M5 20h14" /></svg>`;
   const rows = items
     .map((m, i) => {
@@ -194,10 +198,10 @@ export function audioPlaylistHTML(items: MediaItem[]): string {
       const sub = (m.artist && m.artist.trim()) || m.caption || '';
       const subHTML = sub ? `<span class="track-sub">${esc(sub)}</span>` : '';
       return (
-        `<li class="track" data-track data-src="${esc(m.src)}">` +
-        `<button type="button" class="track-play" data-play>` +
+        `<li class="track" data-track data-src="${esc(m.src)}" data-title="${esc(label)}">` +
+        `<button type="button" class="track-play" data-play aria-label="Play ${esc(label)}">` +
         `<span class="track-num" aria-hidden="true">${i + 1}</span>` +
-        `<span class="track-icon" aria-hidden="true">${playSvg}</span>` +
+        `<span class="track-eq" aria-hidden="true"><i></i><i></i><i></i></span>` +
         `<span class="track-meta"><span class="track-title">${esc(label)}</span>${subHTML}</span>` +
         `</button>` +
         `<a class="track-dl" href="${esc(m.src)}" download aria-label="Download ${esc(label)}">${dlSvg}</a>` +
@@ -207,7 +211,14 @@ export function audioPlaylistHTML(items: MediaItem[]): string {
     .join('');
   return (
     `<figure class="media audio-playlist" data-audio-playlist>` +
-    `<audio controls preload="none"></audio>` +
+    `<audio preload="none"></audio>` +
+    `<div class="ap-bar">` +
+    `<button type="button" class="ap-toggle" data-toggle aria-label="Play">${playSvg}${pauseSvg}</button>` +
+    `<div class="ap-body">` +
+    `<div class="ap-top"><span class="ap-title" data-nowtitle></span><span class="ap-time" data-time>0:00 / 0:00</span></div>` +
+    `<input type="range" class="ap-seek" data-seek min="0" max="1000" value="0" step="1" aria-label="Seek" />` +
+    `</div>` +
+    `</div>` +
     `<ol class="tracks">${rows}</ol>` +
     `</figure>`
   );
