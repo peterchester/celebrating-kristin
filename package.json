@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "capture": "node capture/dev-server.mjs",
+    "capture": "node --env-file-if-exists=capture/.env capture/dev-server.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "deploy-frontend": "./deploy.sh",
