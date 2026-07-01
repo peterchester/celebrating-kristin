@@ -124,11 +124,18 @@
 /* ── Multi-track audio playlist ───────────────────────────────────────────────
    One shared <audio> above a labeled track list. Each row is a full-width play
    button plus a small, always-visible download link. Wiring: src/lib/audio.ts. */
-.audio-playlist audio { width: 100%; }
-.audio-playlist .tracks {
-  list-style: none; margin: 0.6rem 0 0; padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px; overflow: hidden;
+/* The figure is the single card: the shared player sits at the top, divided
+   from the track list below by a hairline, all inside one border. */
+.audio-playlist {
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
 }
+.audio-playlist audio {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.audio-playlist .tracks { list-style: none; margin: 0; padding: 0; }
 .audio-playlist .track {
   display: flex; align-items: center;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
