@@ -197,6 +197,11 @@ export function audioPlaylistHTML(items: MediaItem[]): string {
       const label = audioTitle(m);
       const sub = (m.artist && m.artist.trim()) || m.caption || '';
       const subHTML = sub ? `<span class="track-sub">${esc(sub)}</span>` : '';
+      // Save the download under the readable label + original extension, so it
+      // isn't the slugged/truncated storage key. (Honored same-origin, which the
+      // media is; ignored cross-origin — harmless.)
+      const ext = (m.src.match(/\.[^./?#]+$/) || [''])[0];
+      const dlName = label + ext;
       return (
         `<li class="track" data-track data-src="${esc(m.src)}" data-title="${esc(label)}">` +
         `<button type="button" class="track-play" data-play aria-label="Play ${esc(label)}">` +
@@ -204,7 +209,7 @@ export function audioPlaylistHTML(items: MediaItem[]): string {
         `<span class="track-eq" aria-hidden="true"><i></i><i></i><i></i></span>` +
         `<span class="track-meta"><span class="track-title">${esc(label)}</span>${subHTML}</span>` +
         `</button>` +
-        `<a class="track-dl" href="${esc(m.src)}" download aria-label="Download ${esc(label)}">${dlSvg}</a>` +
+        `<a class="track-dl" href="${esc(m.src)}" download="${esc(dlName)}" aria-label="Download ${esc(label)}">${dlSvg}</a>` +
         `</li>`
       );
     })

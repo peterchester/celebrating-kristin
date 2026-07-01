@@ -212,14 +212,19 @@ export async function uploadOne(
 
   // Audio: read the ID3 title/artist (best-effort, no dependency) so the player
   // can label the track, then upload the file as-is (no optimization/poster).
+  // The label is stored on the item — NOT derived from the S3 key at render
+  // time — because the key is slugged and length-capped (e.g. a 19-char name
+  // truncates to 18), which would clip long titles. Prefer the ID3 title; fall
+  // back to the original filename, which keeps the user's spacing and casing.
   if (type === 'audio') {
     const tags = await readAudioTags(file);
+    const title = tags.title || originalBase.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
     const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
     return {
       type,
       src: key,
       caption: '',
-      ...(tags.title ? { title: tags.title } : {}),
+      ...(title ? { title } : {}),
       ...(tags.artist ? { artist: tags.artist } : {}),
     };
   }
