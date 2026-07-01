@@ -91,13 +91,19 @@ export function cardHTML(entry: Entry): string {
   const media = entry.media ?? [];
   const firstImage = media.find((m) => m.type === 'image');
   const firstVideo = media.find((m) => m.type === 'video');
-  const hasAudio = media.some((m) => m.type === 'audio');
+  const firstAudio = media.find((m) => m.type === 'audio');
+  const hasAudio = !!firstAudio;
   const photoCount = media.filter((m) => m.type === 'image').length;
+  // Cover precedence: a real photo, else a video's poster, else an audio post's
+  // custom poster (owner-set from the edit form). With none, an audio card falls
+  // back to the waveform mark below.
   const cover = firstImage
     ? { src: firstImage.src, alt: firstImage.alt ?? firstImage.caption ?? '' }
     : firstVideo?.poster
       ? { src: firstVideo.poster, alt: '' }
-      : null;
+      : firstAudio?.poster
+        ? { src: firstAudio.poster, alt: '' }
+        : null;
   const kind = firstImage ? 'image' : firstVideo ? 'video' : hasAudio ? 'audio' : 'text';
 
   const firstPara = (entry.body || '').split(/\n\s*\n/)[0].trim();
@@ -265,26 +271,40 @@ export function shouldInlineLeadImage(width: number, height: number): boolean {
 // or a tall/low-res image lead (inlineLead) — stays inline above the text
 // instead. Remaining media follow the body. `inlineLead` is set by the caller
 // after measuring the lead image (see shouldInlineLeadImage).
+// Which lead media becomes the full-bleed banner: a video, a non-demoted image,
+// or an audio clip that carries a custom poster (its cover art). An audio lead
+// without a poster stays inline (its player leads the body instead).
+function isBannerLead(lead: MediaItem | undefined, inlineLead: boolean): boolean {
+  if (!lead) return false;
+  return (
+    lead.type === 'video' ||
+    (lead.type === 'image' && !inlineLead) ||
+    (lead.type === 'audio' && !!lead.poster)
+  );
+}
+
 export function bannerHTML(entry: Entry, inlineLead = false): string {
   const lead = (entry.media ?? [])[0];
-  if (!lead) return '';
-  // Video always banners; an image banners unless the caller demoted it inline.
-  const isBanner = lead.type === 'video' || (lead.type === 'image' && !inlineLead);
-  if (!isBanner) return '';
+  if (!isBannerLead(lead, inlineLead)) return '';
+  const l = lead as MediaItem;
+  // An audio poster is a plain cover image; mark it .banner-poster so the photo
+  // lightbox wiring can skip it (it isn't one of the post's photos).
   const m =
-    lead.type === 'image'
-      ? `<img src="${esc(lead.src)}" alt="${esc(lead.alt ?? lead.caption ?? '')}" />`
-      : videoTag(lead);
-  const cap = lead.caption ? `<p class="banner-caption">${esc(lead.caption)}</p>` : '';
+    l.type === 'image'
+      ? `<img src="${esc(l.src)}" alt="${esc(l.alt ?? l.caption ?? '')}" />`
+      : l.type === 'audio'
+        ? `<img class="banner-poster" src="${esc(l.poster)}" alt="${esc(l.alt ?? l.caption ?? '')}" />`
+        : videoTag(l);
+  const cap = l.caption ? `<p class="banner-caption">${esc(l.caption)}</p>` : '';
   return `<div class="post-banner">${m}${cap}</div>`;
 }
 
 export function postContentHTML(entry: Entry, inlineLead = false): string {
   const media = entry.media ?? [];
   const lead = media[0];
-  // Mirror bannerHTML: an inlined image lead is NOT a banner, so it falls
-  // through to the inline render below alongside audio leads.
-  const hasBanner = !!lead && (lead.type === 'video' || (lead.type === 'image' && !inlineLead));
+  // Mirror bannerHTML: an inlined image lead (or a poster-less audio lead) is
+  // NOT a banner, so it falls through to the inline render below.
+  const hasBanner = isBannerLead(lead, inlineLead);
   // Two or more audio clips collapse into a single playlist (rendered once,
   // under the byline). A lone clip keeps the bare inline player it's always had.
   const audioItems = media.filter((m) => m.type === 'audio');
@@ -301,10 +321,11 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   if (!hasBanner && lead?.type === 'image') html += mediaHTML(lead);
   if (entry.title) html += `<h1>${esc(entry.title)}</h1>`;
   html += `<p class="byline">Shared by ${esc(entry.author.name)}${rel}${date}</p>`;
-  // Audio sits inline just under the byline (no banner for audio): a playlist
-  // when there are several, or a single bare player for one lead clip.
+  // Audio always plays under the byline, even when a poster is shown as a banner
+  // above: a playlist when there are several clips, or a single bare player for
+  // one lead clip. (The poster only appears as cover art; the player stays here.)
   if (isPlaylist) html += audioPlaylistHTML(audioItems);
-  else if (!hasBanner && lead?.type === 'audio') html += mediaHTML(lead);
+  else if (lead?.type === 'audio') html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</article>`;
   // Trailing media after the body. When the audio became a playlist it's already
   // rendered above, so drop the audio items from the inline flow.

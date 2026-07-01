@@ -35,7 +35,7 @@ const TURNSTILE_SITE_KEY =
             <div id="ot-poster-empty" class="ot-poster-empty" hidden>No cover yet</div>
             <div class="ot-poster-controls">
               <label class="ot-poster-btn">Replace image…<input id="ot-poster-input" type="file" accept="image/*" hidden /></label>
-              <small>A landscape image (about 1280×720) looks best, matching the video. Any size works — it’s resized automatically.</small>
+              <small>A landscape image (about 1280×720) looks best. Any size works — it’s resized automatically.</small>
             </div>
           </div>
         </div>
@@ -181,16 +181,20 @@ const TURNSTILE_SITE_KEY =
     fld('relationship').value = entry.author?.relationship || '';
     fld('body').value = entry.body || '';
 
-    // Cover/poster editing — only for memories that contain a video. Targets the
-    // first video; its poster is what the gallery card and the player show.
+    // Cover/poster editing — for a memory led by a video OR an audio post.
+    // Prefer the first video; otherwise the first audio (video keeps precedence
+    // when a post has both). The poster is what the gallery card shows, and for
+    // audio it also becomes the post banner.
     const videoIndex = (entry.media || []).findIndex((m: any) => m?.type === 'video');
+    const audioIndex = (entry.media || []).findIndex((m: any) => m?.type === 'audio');
+    const posterIndex = videoIndex >= 0 ? videoIndex : audioIndex;
     let posterFile: File | null = null;
-    if (videoIndex >= 0) {
+    if (posterIndex >= 0) {
       const posterBox = document.getElementById('ot-poster') as HTMLElement;
       const posterInput = document.getElementById('ot-poster-input') as HTMLInputElement;
       const posterThumb = document.getElementById('ot-poster-thumb') as HTMLImageElement;
       const posterEmpty = document.getElementById('ot-poster-empty') as HTMLElement;
-      const current = entry.media[videoIndex].poster;
+      const current = entry.media[posterIndex].poster;
       const showThumb = (src: string) => { posterThumb.src = src; posterThumb.hidden = false; posterEmpty.hidden = true; };
       if (current) showThumb(current);
       else { posterThumb.hidden = true; posterEmpty.hidden = false; }
@@ -231,7 +235,7 @@ const TURNSTILE_SITE_KEY =
           name: fld('name').value,
           relationship: fld('relationship').value,
           body: fld('body').value,
-          ...(posterKey ? { poster: posterKey, posterIndex: videoIndex } : {}),
+          ...(posterKey ? { poster: posterKey, posterIndex } : {}),
         });
         if (!r.ok) throw new Error('Could not save — your edit access may have expired.');
         location.reload();
@@ -445,7 +449,9 @@ const TURNSTILE_SITE_KEY =
     // DOM <img>s line up index-for-index with the gallery items.
     const postPhotos = imageItems(entry.media);
     const postImgs = [
-      ...document.querySelectorAll('#post-banner img'),
+      // Skip an audio post's poster banner (.banner-poster) — it's cover art,
+      // not one of the post's photos, so it must not shift the gallery indices.
+      ...document.querySelectorAll('#post-banner img:not(.banner-poster)'),
       ...document.querySelectorAll('#post-content .media img'),
     ] as HTMLImageElement[];
     attachThumbs(postImgs, postPhotos);

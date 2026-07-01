@@ -243,10 +243,10 @@ const server = createServer(async (req, res) => {
       if (memoryDate === '') delete entry.memoryDate; // cleared
       else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
 
-      // Replace a video's poster/cover image (mirrors the Lambda).
+      // Replace a video's or audio post's poster/cover image (mirrors the Lambda).
       if (typeof poster === 'string' && Number.isInteger(posterIndex)) {
         const m = entry.media?.[posterIndex];
-        if (m && m.type === 'video' && poster.startsWith('/media/') && !poster.includes('..')) {
+        if (m && (m.type === 'video' || m.type === 'audio') && poster.startsWith('/media/') && !poster.includes('..')) {
           const old = m.poster;
           m.poster = poster;
           if (old && old !== poster && old.startsWith('/media/u/')) {

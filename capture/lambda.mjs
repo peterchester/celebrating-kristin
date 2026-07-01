@@ -365,14 +365,14 @@ export const handler = async (event) => {
       if (memoryDate === '') delete entry.memoryDate;
       else if (typeof memoryDate === 'string') { const md = validMemoryDate(memoryDate); if (md) entry.memoryDate = md; }
 
-      // Replace a video's poster/cover image. `poster` is the new /media/ key;
-      // `posterIndex` selects which media item (must be a video). A previous
-      // custom poster (media/u/) is deleted; a server-generated one (media/hls/)
-      // is left in place.
+      // Replace a video's or audio post's poster/cover image. `poster` is the
+      // new /media/ key; `posterIndex` selects which media item (video or audio).
+      // A previous custom poster (media/u/) is deleted; a server-generated one
+      // (media/hls/) is left in place.
       if (typeof poster === 'string' && Number.isInteger(posterIndex)) {
         const m = entry.media?.[posterIndex];
         const newKey = mediaKey(poster);
-        if (m && m.type === 'video' && newKey) {
+        if (m && (m.type === 'video' || m.type === 'audio') && newKey) {
           const oldKey = mediaKey(m.poster);
           m.poster = poster;
           if (oldKey && oldKey !== newKey && oldKey.startsWith('media/u/')) {
