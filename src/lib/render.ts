@@ -86,6 +86,14 @@ function linkify(text: string): string {
   });
 }
 
+// Render one paragraph of body text: escape + linkify, then honor the single
+// line breaks that remain inside it as <br>. Blank lines already became
+// separate <p> via the paragraph split, so a lone newline here is a deliberate
+// soft break the writer typed and should be preserved.
+function paragraphHTML(text: string): string {
+  return linkify(text).replace(/\r\n|\r|\n/g, '<br>');
+}
+
 // ── Home gallery card (mirrors MemoryCard.astro) ─────────────────────────────
 export function cardHTML(entry: Entry): string {
   const media = entry.media ?? [];
@@ -326,7 +334,7 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   // one lead clip. (The poster only appears as cover art; the player stays here.)
   if (isPlaylist) html += audioPlaylistHTML(audioItems);
   else if (lead?.type === 'audio') html += mediaHTML(lead);
-  html += `<article>${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</article>`;
+  html += `<article>${paragraphs.map((p) => `<p>${paragraphHTML(p)}</p>`).join('')}</article>`;
   // Trailing media after the body. When the audio became a playlist it's already
   // rendered above, so drop the audio items from the inline flow.
   const trailing = media.slice(1).filter((m) => !(isPlaylist && m.type === 'audio'));
@@ -346,7 +354,7 @@ export interface Reflection {
 export function reflectionHTML(r: Reflection): string {
   const paragraphs = (r.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   const body = paragraphs.length
-    ? `<div class="reflection-body">${paragraphs.map((p) => `<p>${linkify(p)}</p>`).join('')}</div>`
+    ? `<div class="reflection-body">${paragraphs.map((p) => `<p>${paragraphHTML(p)}</p>`).join('')}</div>`
     : '';
   const media = (r.media || []).map(mediaHTML).join('');
   return (
