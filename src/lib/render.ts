@@ -219,8 +219,7 @@ export function audioPlaylistHTML(items: MediaItem[]): string {
       return (
         `<li class="track" data-track data-src="${esc(m.src)}" data-title="${esc(label)}">` +
         `<button type="button" class="track-play" data-play aria-label="Play ${esc(label)}">` +
-        `<span class="track-num" aria-hidden="true">${i + 1}</span>` +
-        `<span class="track-eq" aria-hidden="true"><i></i><i></i><i></i></span>` +
+        `<span class="track-btn" aria-hidden="true">${playSvg}${pauseSvg}</span>` +
         `<span class="track-meta"><span class="track-title">${esc(label)}</span>${subHTML}</span>` +
         `</button>` +
         `<a class="track-dl" href="${esc(m.src)}" download="${esc(dlName)}" aria-label="Download ${esc(label)}">${dlSvg}</a>` +

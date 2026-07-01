@@ -53,13 +53,24 @@ export function attachAudioPlaylist(root: ParentNode = document): void {
       if (seek && !scrubbing) seek.value = String(isFinite(d) && d > 0 ? Math.round((c / d) * 1000) : 0);
     };
 
+    // Label the active row's play button with the current action (Play/Pause),
+    // so the icon swap has an accessible counterpart.
+    const setRowAria = (i: number, verb: string) => {
+      const r = rows[i];
+      const b = r?.querySelector('[data-play]');
+      if (r && b) b.setAttribute('aria-label', `${verb} ${r.getAttribute('data-title') || ''}`.trim());
+    };
+
     // Load a track into the shared <audio> (and optionally start it). Highlights
     // the row and updates the now-playing label; resets the transport display.
     const select = (i: number, play: boolean) => {
       if (i < 0 || i >= rows.length) return;
       current = i;
       audio.src = rows[i].getAttribute('data-src') || '';
-      rows.forEach((r, idx) => r.classList.toggle('playing', idx === i));
+      rows.forEach((r, idx) => {
+        r.classList.toggle('playing', idx === i);
+        setRowAria(idx, 'Play'); // every row reads "Play …"; the active one flips on play
+      });
       if (nowTitle) nowTitle.textContent = rows[i].getAttribute('data-title') || '';
       if (seek) seek.value = '0';
       if (timeEl) timeEl.textContent = '0:00 / 0:00';
@@ -94,10 +105,12 @@ export function attachAudioPlaylist(root: ParentNode = document): void {
     audio.addEventListener('play', () => {
       pl.classList.add('is-playing');
       toggle?.setAttribute('aria-label', 'Pause');
+      setRowAria(current, 'Pause');
     });
     audio.addEventListener('pause', () => {
       pl.classList.remove('is-playing');
       toggle?.setAttribute('aria-label', 'Play');
+      setRowAria(current, 'Play');
     });
     // Chain to the next track when one finishes (stops after the last).
     audio.addEventListener('ended', () => {
