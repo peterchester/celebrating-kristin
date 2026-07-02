@@ -278,18 +278,23 @@ export function shouldInlineLeadImage(width: number, height: number): boolean {
 // or a tall/low-res image lead (inlineLead) — stays inline above the text
 // instead. Remaining media follow the body. `inlineLead` is set by the caller
 // after measuring the lead image (see shouldInlineLeadImage).
-// Which lead media becomes the full-bleed banner: a video, or a non-demoted
-// image. An audio lead never banners — its cover art (if any) instead leads the
-// content column at normal width (see postContentHTML).
-function isBannerLead(lead: MediaItem | undefined, inlineLead: boolean): boolean {
+// Which lead media becomes the full-bleed banner: a non-demoted image, or a
+// video ONLY when it's the post's sole video. Two or more videos usually belong
+// together as a set, so none leads — they all group below the text instead.
+// Audio never banners — its cover art (if any) leads the content column at normal
+// width (see postContentHTML).
+function isBannerLead(media: MediaItem[], inlineLead: boolean): boolean {
+  const lead = media[0];
   if (!lead) return false;
-  return lead.type === 'video' || (lead.type === 'image' && !inlineLead);
+  if (lead.type === 'image') return !inlineLead;
+  if (lead.type === 'video') return media.filter((m) => m.type === 'video').length === 1;
+  return false;
 }
 
 export function bannerHTML(entry: Entry, inlineLead = false): string {
-  const lead = (entry.media ?? [])[0];
-  if (!isBannerLead(lead, inlineLead)) return '';
-  const l = lead as MediaItem;
+  const media = entry.media ?? [];
+  if (!isBannerLead(media, inlineLead)) return '';
+  const l = media[0] as MediaItem;
   const m =
     l.type === 'image'
       ? `<img src="${esc(l.src)}" alt="${esc(l.alt ?? l.caption ?? '')}" />`
@@ -301,9 +306,9 @@ export function bannerHTML(entry: Entry, inlineLead = false): string {
 export function postContentHTML(entry: Entry, inlineLead = false): string {
   const media = entry.media ?? [];
   const lead = media[0];
-  // Mirror bannerHTML: an inlined image lead (or a poster-less audio lead) is
-  // NOT a banner, so it falls through to the inline render below.
-  const hasBanner = isBannerLead(lead, inlineLead);
+  // Mirror bannerHTML: an inlined image lead, a poster-less audio lead, or a
+  // demoted lead video (one of several) is NOT a banner.
+  const hasBanner = isBannerLead(media, inlineLead);
   // Two or more audio clips collapse into a single playlist (rendered once,
   // under the byline). A lone clip keeps the bare inline player it's always had.
   const audioItems = media.filter((m) => m.type === 'audio');
@@ -332,10 +337,13 @@ export function postContentHTML(entry: Entry, inlineLead = false): string {
   if (isPlaylist) html += audioPlaylistHTML(audioItems);
   else if (lead?.type === 'audio') html += mediaHTML(lead);
   html += `<article>${paragraphs.map((p) => `<p>${paragraphHTML(p)}</p>`).join('')}</article>`;
-  // Trailing media after the body. When the audio became a playlist it's already
-  // rendered above, so drop the audio items from the inline flow.
-  const trailing = media.slice(1).filter((m) => !(isPlaylist && m.type === 'audio'));
-  html += trailing.map(mediaHTML).join('');
+  // Media below the body. The lead is already shown above when it's a banner, a
+  // demoted inline image, or an audio player — but a demoted lead video (one of
+  // several) is not, so it joins the videos below. Playlist audio is rendered
+  // above, so drop it here.
+  const leadShownAbove = hasBanner || lead?.type === 'image' || lead?.type === 'audio';
+  const below = media.slice(leadShownAbove ? 1 : 0).filter((m) => !(isPlaylist && m.type === 'audio'));
+  html += below.map(mediaHTML).join('');
   return html;
 }
 
