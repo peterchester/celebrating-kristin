@@ -41,6 +41,12 @@ const ADMIN = process.env.RK_ADMIN_TOKEN || '';
 //   1x000…AA always passes, 2x000…AA always fails.
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
 
+// Contributor passphrase for /share (mirrors the Lambda). Defaults to "letmein"
+// locally so the gate is testable out of the box; set CONTRIBUTOR_PASSWORD in
+// capture/.env to try a different one. REFLECTIONS_OPEN=false closes reflections.
+const CONTRIBUTOR_PASSWORD = process.env.CONTRIBUTOR_PASSWORD ?? 'letmein';
+const REFLECTIONS_OPEN = !/^(false|0|no|off)$/i.test(process.env.REFLECTIONS_OPEN || 'true');
+
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET,POST,PUT,OPTIONS',
@@ -96,6 +102,36 @@ const saveTokens = async (o) => {
 };
 const ADMIN_HASH = ADMIN ? sha(ADMIN) : '';
 const isAdmin = (t) => !!ADMIN_HASH && typeof t === 'string' && eq(t, ADMIN_HASH);
+
+// ── Lockdown: contributor passphrase + reflection spam rules ─────────────────
+// New memories (and their uploads) require the shared contributor passphrase
+// (or admin). Fails CLOSED: with no passphrase configured, only admin can share.
+// Passphrases are compared after normalizing to lowercase letters + digits, so
+// "Blue Heron Sunrise", "blue-heron-sunrise" and "blueheronsunrise" all match.
+const normPass = (p) => String(p ?? '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const PASS_HASH = normPass(CONTRIBUTOR_PASSWORD) ? sha(normPass(CONTRIBUTOR_PASSWORD)) : '';
+const passOk = (p) => !!PASS_HASH && typeof p === 'string' && !!normPass(p) && eq(sha(normPass(p)), PASS_HASH);
+const canContribute = (s) => passOk(s?.passphrase) || isAdmin(s?.adminToken);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Reflections are text only. These limits keep drive-by spam out without
+// getting in the way of a real note.
+const REFLECTION_MAX_CHARS = 3000;
+const REFLECTION_MAX_LINKS = 1;
+const NAME_MAX_CHARS = 100;
+const countLinks = (t) => (String(t).match(/https?:\/\/|www\.|\[url/gi) || []).length;
+// Returns a human-readable error string, or null if the reflection is acceptable.
+const reflectionProblem = (s) => {
+  const name = String(s?.author?.name ?? '').trim();
+  const body = String(s?.body ?? '').trim();
+  if (!name) return 'Please add your name.';
+  if (name.length > NAME_MAX_CHARS) return 'That name is too long.';
+  if (Array.isArray(s?.media) && s.media.length) return 'Reflections are text only.';
+  if (!body) return 'Please write a reflection.';
+  if (body.length > REFLECTION_MAX_CHARS) return `Please keep reflections under ${REFLECTION_MAX_CHARS} characters.`;
+  if (countLinks(body) > REFLECTION_MAX_LINKS || countLinks(name)) return 'Please remove the links from your reflection.';
+  return null;
+};
 
 // Verify a Cloudflare Turnstile token server-side. Skipped if no secret is set.
 const verifyTurnstile = async (token, ip) => {
@@ -175,8 +211,20 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
 
+    if (req.method === 'POST' && url.pathname === '/unlock') {
+      const s = JSON.parse((await readBody(req)).toString() || '{}');
+      if (canContribute(s)) return send(res, 200, { ok: true });
+      await sleep(750);
+      return send(res, 403, { error: 'That passphrase didn’t match.' });
+    }
+
     if (req.method === 'POST' && url.pathname === '/presign') {
-      const { filename, contentType, kind } = JSON.parse((await readBody(req)).toString() || '{}');
+      const s = JSON.parse((await readBody(req)).toString() || '{}');
+      const { filename, contentType, kind } = s;
+      const ownerCover =
+        /^[A-Za-z0-9_-]+$/.test(s.entryId || '') && String(contentType || '').startsWith('image/') && kind !== 'original' &&
+        (await authorize(s.entryId, s.token, s.adminToken));
+      if (!canContribute(s) && !ownerCover) return send(res, 403, { error: 'passphrase required' });
       const rand = Math.random().toString(36).slice(2, 8);
       const prefix = kind === 'original' ? '/media/originals/' : '/media/u/';
       const key = `${prefix}${rand}-${slug(filename?.replace(/\.[^.]+$/, ''))}${(filename?.match(/\.[^.]+$/) || [''])[0]}`;
@@ -197,13 +245,15 @@ const server = createServer(async (req, res) => {
       if (!s?.author?.name) return send(res, 400, { error: 'name is required' });
       if (!s?.body && !(Array.isArray(s.media) && s.media.length))
         return send(res, 400, { error: 'add a memory or at least one photo, video, or audio' });
+      if (!canContribute(s)) return send(res, 403, { error: 'passphrase required' });
       if (!(await verifyTurnstile(s.turnstileToken, req.socket?.remoteAddress)))
         return send(res, 403, { error: 'verification failed' });
 
       const now = new Date();
       const id = await uniqueEntryId(s.title ? slug(s.title) : slug(s.author.name));
 
-      const { email, memoryDate, turnstileToken, ...rest } = s; // private/transient fields never stored
+      // private/transient fields never stored (the passphrase must never land in public JSON)
+      const { email, memoryDate, turnstileToken, passphrase, adminToken, ...rest } = s;
       const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };
       const md = validMemoryDate(memoryDate, now); // future/invalid dates are dropped
       if (md) entry.memoryDate = md;
@@ -289,20 +339,20 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/comment') {
       const s = JSON.parse((await readBody(req)).toString() || '{}');
+      if (!REFLECTIONS_OPEN) return send(res, 403, { error: 'Reflections are closed right now.' });
       if (!/^[A-Za-z0-9_-]+$/.test(s.entryId || '')) return send(res, 400, { error: 'bad entry id' });
-      if (!s?.author?.name) return send(res, 400, { error: 'name is required' });
-      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
-        return send(res, 400, { error: 'add a reflection or a photo, video, or audio' });
+      if (s.website) { console.log('honeypot tripped, reflection dropped'); return send(res, 200, { ok: true, id: randomBytes(8).toString('hex') }); }
+      const problem = reflectionProblem(s);
+      if (problem) return send(res, 400, { error: problem });
       if (!(await verifyTurnstile(s.turnstileToken, req.socket?.remoteAddress)))
-        return send(res, 403, { error: 'verification failed' });
+        return send(res, 403, { error: 'The “I’m not a robot” check failed. Please try again.' });
       if (!(await exists(join(ENTRIES, `${s.entryId}.json`)))) return send(res, 404, { error: 'no such memory' });
 
       const commentId = randomBytes(8).toString('hex');
       const reflection = {
         id: commentId,
         author: { name: String(s.author.name).trim() },
-        ...(s.body ? { body: String(s.body).trim() } : {}),
-        ...(Array.isArray(s.media) && s.media.length ? { media: s.media } : {}),
+        body: String(s.body).trim(),
         createdAt: new Date().toISOString(),
       };
       await mkdir(COMMENTS, { recursive: true });
@@ -351,5 +401,6 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, async () => {
   await rebuildIndex(); // pick up any hand-added entry files on startup
   console.log(`Capture mock running → http://localhost:${PORT}`);
+  console.log(`Contributor passphrase for /share: "${CONTRIBUTOR_PASSWORD}"${REFLECTIONS_OPEN ? '' : ' (reflections CLOSED)'}`);
   console.log('Submissions are written to public/entries/ + public/data/index.json — the dev site reads them live.');
 });

@@ -9,6 +9,10 @@
 //                a per-entry edit token
 //   /update   -> edit an entry (owner token or admin)
 //   /delete   -> delete an entry and its uploaded media
+//   /unlock   -> checks the contributor passphrase (used by /share before showing the form)
+//   /comment  -> adds a text-only reflection (spam rules below)
+//
+// Lockdown: /presign and /submit require the shared CONTRIBUTOR_PASSWORD (or admin).
 //
 // The browser uploads media bytes DIRECTLY to S3 via the presigned URL, so big
 // videos never pass through the function. Public memory JSON + media live in the
@@ -38,6 +42,8 @@ const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || ''; // optional captcha
 const NOTIFY_FROM = process.env.NOTIFY_FROM || '';          // SES sender; blank = no emails
 const SITE_URL = (process.env.SITE_URL || '').replace(/\/$/, ''); // for links in emails
 const EMAIL_ADDRESS = process.env.EMAIL_ADDRESS || '';      // inbound address for reply-to (reply = reflection)
+const CONTRIBUTOR_PASSWORD = process.env.CONTRIBUTOR_PASSWORD || ''; // shared passphrase for /share; blank = admin only
+const REFLECTIONS_OPEN = !/^(false|0|no|off)$/i.test(process.env.REFLECTIONS_OPEN || 'true'); // kill switch
 
 const ENTRIES = 'entries/';        // entries/<id>.json  (public)
 const COMMENTS = 'comments/';      // comments/<entryId>.json — array of reflections (public)
@@ -61,6 +67,36 @@ const eq = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Bu
 const ADMIN_HASH = ADMIN ? sha(ADMIN) : '';
 const isAdmin = (t) => !!ADMIN_HASH && typeof t === 'string' && eq(t, ADMIN_HASH);
 const safeId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
+
+// ── Lockdown: contributor passphrase + reflection spam rules ─────────────────
+// New memories (and their uploads) require the shared contributor passphrase
+// (or admin). Fails CLOSED: with no passphrase configured, only admin can share.
+// Passphrases are compared after normalizing to lowercase letters + digits, so
+// "Blue Heron Sunrise", "blue-heron-sunrise" and "blueheronsunrise" all match.
+const normPass = (p) => String(p ?? '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const PASS_HASH = normPass(CONTRIBUTOR_PASSWORD) ? sha(normPass(CONTRIBUTOR_PASSWORD)) : '';
+const passOk = (p) => !!PASS_HASH && typeof p === 'string' && !!normPass(p) && eq(sha(normPass(p)), PASS_HASH);
+const canContribute = (s) => passOk(s?.passphrase) || isAdmin(s?.adminToken);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Reflections are text only. These limits keep drive-by spam out without
+// getting in the way of a real note.
+const REFLECTION_MAX_CHARS = 3000;
+const REFLECTION_MAX_LINKS = 1;
+const NAME_MAX_CHARS = 100;
+const countLinks = (t) => (String(t).match(/https?:\/\/|www\.|\[url/gi) || []).length;
+// Returns a human-readable error string, or null if the reflection is acceptable.
+const reflectionProblem = (s) => {
+  const name = String(s?.author?.name ?? '').trim();
+  const body = String(s?.body ?? '').trim();
+  if (!name) return 'Please add your name.';
+  if (name.length > NAME_MAX_CHARS) return 'That name is too long.';
+  if (Array.isArray(s?.media) && s.media.length) return 'Reflections are text only.';
+  if (!body) return 'Please write a reflection.';
+  if (body.length > REFLECTION_MAX_CHARS) return `Please keep reflections under ${REFLECTION_MAX_CHARS} characters.`;
+  if (countLinks(body) > REFLECTION_MAX_LINKS || countLinks(name)) return 'Please remove the links from your reflection.';
+  return null;
+};
 
 // ── S3 helpers ───────────────────────────────────────────────────────────────
 async function getJson(bucket, key, fallback) {
@@ -297,8 +333,23 @@ export const handler = async (event) => {
       return json(200, { ok: true });
     }
 
+    // Check the contributor passphrase so /share can unlock the form before the
+    // contributor fills anything in. A failed guess is slowed down a little.
+    if (method === 'POST' && path === '/unlock') {
+      if (canContribute(s)) return json(200, { ok: true });
+      await sleep(750);
+      return json(403, { error: 'That passphrase didn’t match.' });
+    }
+
     if (method === 'POST' && path === '/presign') {
       const { filename, contentType, kind } = s;
+      // Uploads need the contributor passphrase (or admin). The one exception is
+      // an existing memory's owner replacing its cover image from the edit form:
+      // a valid edit token for that entry allows a single web image upload.
+      const ownerCover =
+        safeId(s.entryId) && String(contentType || '').startsWith('image/') && kind !== 'original' &&
+        (await authorize(s.entryId, s.token, s.adminToken));
+      if (!canContribute(s) && !ownerCover) return json(403, { error: 'passphrase required' });
       const rand = randomBytes(3).toString('hex');
       const base = slug(String(filename || '').replace(/\.[^.]+$/, ''));
       const ext = (String(filename || '').match(/\.[^.]+$/) || [''])[0];
@@ -323,11 +374,13 @@ export const handler = async (event) => {
       if (!s?.author?.name) return json(400, { error: 'name is required' });
       if (!s?.body && !(Array.isArray(s.media) && s.media.length))
         return json(400, { error: 'add a memory or at least one photo, video, or audio' });
+      if (!canContribute(s)) return json(403, { error: 'passphrase required' });
       if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'verification failed' });
 
       const now = new Date();
       const id = await uniqueEntryId(s.title ? slug(s.title) : slug(s.author.name));
-      const { email, memoryDate, turnstileToken, ...rest } = s; // private/transient, never stored
+      // private/transient, never stored (the entry JSON is public — the passphrase must not land in it)
+      const { email, memoryDate, turnstileToken, passphrase, adminToken, ...rest } = s;
       const entry = { ...rest, submittedAt: now.toISOString(), status: 'published' };
       const md = validMemoryDate(memoryDate, now);
       if (md) entry.memoryDate = md;
@@ -405,28 +458,27 @@ export const handler = async (event) => {
     }
 
     if (method === 'POST' && path === '/comment') {
+      if (!REFLECTIONS_OPEN) return json(403, { error: 'Reflections are closed right now.' });
       if (!safeId(s.entryId)) return json(400, { error: 'bad entry id' });
-      if (!s?.author?.name) return json(400, { error: 'name is required' });
-      if (!s?.body && !(Array.isArray(s.media) && s.media.length))
-        return json(400, { error: 'add a reflection or a photo, video, or audio' });
-      if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'verification failed' });
+      // Honeypot: a hidden "website" field real visitors never see. Bots that fill
+      // it get a fake success so they don't adapt; nothing is saved.
+      if (s.website) return json(200, { ok: true, id: randomBytes(8).toString('hex') });
+      const problem = reflectionProblem(s);
+      if (problem) return json(400, { error: problem });
+      if (!(await verifyTurnstile(s.turnstileToken, ip))) return json(403, { error: 'The “I’m not a robot” check failed. Please try again.' });
       if (!(await exists(SITE, `${ENTRIES}${s.entryId}.json`))) return json(404, { error: 'no such memory' });
 
       const commentId = randomBytes(8).toString('hex');
       const reflection = {
         id: commentId,
         author: { name: String(s.author.name).trim() },
-        ...(s.body ? { body: String(s.body).trim() } : {}),
-        ...(Array.isArray(s.media) && s.media.length ? { media: s.media } : {}),
+        body: String(s.body).trim(),
         createdAt: new Date().toISOString(),
       };
       const key = `${COMMENTS}${s.entryId}.json`;
       const list = await getJson(SITE, key, []);
       list.push(reflection);
       await putJson(SITE, key, list);
-
-      // Transcode any videos in the reflection; completion patches this comment.
-      await startTranscodes(reflection.media, { kind: 'comment', entryId: s.entryId, commentId });
 
       const editToken = randomBytes(16).toString('hex');
       const tokens = await loadTokens();

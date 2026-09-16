@@ -56,21 +56,20 @@ const TURNSTILE_SITE_KEY =
       <h2 class="reflections-title">Reflections</h2>
       <div id="reflections-list" class="reflections-list"></div>
       <form id="reflection-form" class="reflection-form">
-        <p class="rf-lede">Add your own perspective to this memory. Share your experience, your thoughts, your photos, or your recording.</p>
+        <p class="rf-lede">Add your own perspective to this memory. Share your experience or your thoughts.</p>
         <label>
           <span>Your name <span class="req">*</span></span>
           <input name="name" type="text" required autocomplete="name" />
         </label>
         <label>
           Your reflection
-          <textarea name="body" rows="4" placeholder="Share a memory or a few words…"></textarea>
+          <textarea name="body" rows="4" maxlength="3000" required placeholder="Share a memory or a few words…"></textarea>
         </label>
-        <label>
-          Add a photo, audio, or video
-          <input name="media" type="file" multiple accept="image/*,audio/*,video/*" />
-        </label>
+        {/* Honeypot: hidden from people, tempting to bots. The backend drops any reflection that fills it. */}
+        <div class="rf-hp" aria-hidden="true">
+          <label>Website<input name="website" type="text" tabindex="-1" autocomplete="off" /></label>
+        </div>
         {TURNSTILE_SITE_KEY && <div class="cf-turnstile" data-sitekey={TURNSTILE_SITE_KEY} data-theme="dark"></div>}
-        <div id="rf-upload-progress" hidden></div>
         <button type="submit">Add reflection</button>
         <p id="rf-status" role="status" aria-live="polite"></p>
       </form>
@@ -94,10 +93,9 @@ const TURNSTILE_SITE_KEY =
 <script>
   import { bannerHTML, postContentHTML, reflectionHTML, shouldInlineLeadImage } from '../../lib/render';
   import { openGallery, attachThumbs, imageItems, isLightboxOpen } from '../../lib/lightbox';
-  import { uploadOne, uploadPoster } from '../../lib/upload';
+  import { uploadPoster } from '../../lib/upload';
   import { attachHls } from '../../lib/hls';
   import { attachAudioPlaylist } from '../../lib/audio';
-  import { createUploadProgress } from '../../lib/progress';
 
   // Edit/delete go to the Lambda. Reads (entry + index) are same-origin static
   // JSON. API base: explicit PUBLIC_API_BASE, else derived from PUBLIC_SUBMIT_API.
@@ -226,7 +224,7 @@ const TURNSTILE_SITE_KEY =
         let posterKey: string | undefined;
         if (posterFile && PRESIGN) {
           statusEl.textContent = 'Uploading cover image…';
-          posterKey = await uploadPoster(posterFile, PRESIGN, { title: fld('title').value || id });
+          posterKey = await uploadPoster(posterFile, PRESIGN, { title: fld('title').value || id }, { entryId: id, ...creds() });
         }
         statusEl.textContent = 'Saving…';
         const r = await post('/update', {
@@ -294,7 +292,6 @@ const TURNSTILE_SITE_KEY =
     const statusEl = document.getElementById('rf-status') as HTMLElement | null;
     if (!section || !listEl || !form || !statusEl) return;
     section.hidden = false;
-    const rfProgress = createUploadProgress(document.getElementById('rf-upload-progress') as HTMLElement);
 
     const adminToken = cookie('rk_admin');
     const owned = () => { try { return JSON.parse(cookie('rk_owner') || '[]'); } catch { return []; } };
@@ -350,42 +347,31 @@ const TURNSTILE_SITE_KEY =
         const turnstileToken = String(fd.get('cf-turnstile-response') || '');
         if (TURNSTILE_SITE_KEY && !turnstileToken) { statusEl!.textContent = 'Please complete the “I’m not a robot” check.'; btn.disabled = false; return; }
         const bodyText = String(fd.get('body') || '').trim();
-        const files = (form.querySelector('input[name="media"]') as HTMLInputElement).files;
-        if (!bodyText && !(files && files.length)) { statusEl!.textContent = 'Please write something, or add a photo, video, or audio.'; btn.disabled = false; return; }
-        const media: any[] = [];
-        if (files && files.length && PRESIGN) {
-          // For reflections we have no title; the parent memory's slug is the
-          // closest equivalent, and gives the file useful archive context.
-          const ctx = { author: String(fd.get('name') || '').trim() || undefined, title: id || undefined };
-          const fileArr = Array.from(files);
-          statusEl!.textContent = 'Uploading…';
-          try {
-            for (let i = 0; i < fileArr.length; i++) {
-              const file = fileArr[i];
-              rfProgress.start(file.name, i, fileArr.length);
-              media.push(await uploadOne(file, PRESIGN, ctx, (p) => rfProgress.update(p)));
-            }
-          } finally {
-            rfProgress.reset();
-          }
+        if (!bodyText) { statusEl!.textContent = 'Please write a reflection.'; btn.disabled = false; return; }
+        // Mirrors the backend's spam rules so people get a clear message up front.
+        if ((bodyText.match(/https?:\/\/|www\.|\[url/gi) || []).length > 1) {
+          statusEl!.textContent = 'Please remove the links from your reflection.'; btn.disabled = false; return;
         }
         const payload = {
           entryId: id,
           author: { name: String(fd.get('name') || '').trim() },
-          body: bodyText || undefined,
-          media,
+          body: bodyText,
+          website: String(fd.get('website') || '') || undefined, // honeypot
           turnstileToken: turnstileToken || undefined,
         };
         const r = await fetch(API_BASE + '/comment', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!r.ok) throw new Error('Could not post your reflection.');
+        if (!r.ok) {
+          let msg = 'Could not post your reflection.';
+          try { const j = await r.json(); if (j?.error && r.status !== 404) msg = j.error; } catch {}
+          throw new Error(msg);
+        }
         const { id: cid, editToken } = await r.json();
         if (cid && editToken) rememberOwner('comment:' + cid, editToken);
         saveProfileFrom(form);
         // Show it immediately from what we just submitted (a re-fetch would be stale).
-        items.push({ id: cid, author: payload.author, body: payload.body, media: payload.media, createdAt: new Date().toISOString() });
+        items.push({ id: cid, author: payload.author, body: payload.body, createdAt: new Date().toISOString() });
         draw();
         (form.querySelector('textarea[name="body"]') as HTMLTextAreaElement).value = '';
-        (form.querySelector('input[name="media"]') as HTMLInputElement).value = '';
         statusEl!.textContent = 'Thank you for adding your reflection. 🤍';
       } catch (err) {
         statusEl!.textContent = (err as Error).message;
@@ -578,4 +564,6 @@ const TURNSTILE_SITE_KEY =
   .reflection-form button[type="submit"] { justify-self: start; padding: .6rem 1.4rem; border: none; border-radius: 999px; background: linear-gradient(120deg, #7ee8c9, #8fd0f0); color: #08111f; font: inherit; font-weight: 600; cursor: pointer; }
   .reflection-form button[type="submit"]:disabled { opacity: .6; cursor: default; }
   #rf-status { margin: 0; min-height: 1.1em; color: var(--soft); font-size: .9rem; }
+  /* Honeypot field: off-screen for people, still in the DOM for bots. */
+  .reflection-form .rf-hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
 </style>

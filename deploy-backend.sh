@@ -20,6 +20,8 @@ SITE_BUCKET="${BUCKET:-}"
 ALLOW_ORIGIN="${ALLOW_ORIGIN:-https://celebrate.kristinallen.com}"
 ADMIN_TOKEN="${ADMIN_TOKEN:-}"
 TURNSTILE_SECRET="${TURNSTILE_SECRET:-}"
+CONTRIBUTOR_PASSWORD="${CONTRIBUTOR_PASSWORD:-}"
+REFLECTIONS_OPEN="${REFLECTIONS_OPEN:-true}"
 NOTIFY_FROM="${NOTIFY_FROM:-}"
 EMAIL_ADDRESS="${EMAIL_ADDRESS:-}"
 SITE_URL="${SITE_URL:-}"
@@ -39,9 +41,29 @@ aws sts get-caller-identity >/dev/null 2>&1 || {
   exit 1
 }
 
+# Lockdown: sharing requires the contributor passphrase. Without one the live
+# site would silently become admin-only, so refuse to deploy instead.
+if [ -z "$CONTRIBUTOR_PASSWORD" ]; then
+  echo "✗ CONTRIBUTOR_PASSWORD is not set — check your .deploy.env." >&2
+  echo "  It's the passphrase people enter on /share. Use words joined by hyphens," >&2
+  echo "  e.g. CONTRIBUTOR_PASSWORD=blue-heron-sunrise (no spaces or quotes)." >&2
+  exit 1
+fi
+case "$CONTRIBUTOR_PASSWORD" in
+  *[[:space:]]*|*\"*|*\'*)
+    echo "✗ CONTRIBUTOR_PASSWORD can't contain spaces or quotes. Join words with hyphens;" >&2
+    echo "  visitors can still type it with spaces (matching ignores spaces, case, punctuation)." >&2
+    exit 1 ;;
+esac
+if [ -z "$TURNSTILE_SECRET" ]; then
+  echo "⚠  TURNSTILE_SECRET is not set: the \"I'm not a robot\" check will NOT be enforced on reflections." >&2
+fi
+
+
 # Build the --parameter-overrides string. Omit optional params when empty so
 # SAM uses the template defaults instead of rejecting an empty value.
 OVERRIDES="SiteBucketName=${SITE_BUCKET} AllowOrigin=${ALLOW_ORIGIN}"
+OVERRIDES="$OVERRIDES ContributorPassword=${CONTRIBUTOR_PASSWORD} ReflectionsOpen=${REFLECTIONS_OPEN}"
 [ -n "$ADMIN_TOKEN" ]      && OVERRIDES="$OVERRIDES AdminToken=${ADMIN_TOKEN}"
 [ -n "$TURNSTILE_SECRET" ] && OVERRIDES="$OVERRIDES TurnstileSecret=${TURNSTILE_SECRET}"
 [ -n "$NOTIFY_FROM" ]      && OVERRIDES="$OVERRIDES NotifyFrom=${NOTIFY_FROM}"

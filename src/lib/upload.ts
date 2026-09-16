@@ -1,4 +1,4 @@
-// Shared upload flow used by the share form AND the reflection form.
+// Shared upload flow used by the share form and the owner edit form (cover images).
 //
 // For images: upload the ORIGINAL untouched, then create a web-optimized JPEG
 // (max 2400px, EXIF stripped, JPEG @0.85) and upload that. Return both keys;
@@ -102,6 +102,16 @@ export interface UploadProgress {
 }
 export type OnUploadProgress = (p: UploadProgress) => void;
 
+// Credentials sent with every /presign request. Uploads are locked down: the
+// backend requires the contributor passphrase (or admin), or, for replacing a
+// memory's cover image, that memory's id + edit token.
+export interface UploadAuth {
+  passphrase?: string;
+  adminToken?: string | null;
+  entryId?: string;
+  token?: string | null;
+}
+
 // PUT the file to S3 with progress reporting. We use XMLHttpRequest rather than
 // fetch because fetch can't report upload (request-body) progress — essential
 // feedback for the multi-GB video masters. Resolves on a 2xx, rejects otherwise.
@@ -133,6 +143,7 @@ async function presignAndPut(
   filename: string,
   kind?: 'original',
   onProgress?: OnUploadProgress,
+  auth?: UploadAuth,
 ): Promise<string> {
   const res = await fetch(presignURL, {
     method: 'POST',
@@ -142,8 +153,10 @@ async function presignAndPut(
       contentType: file.type,
       size: file.size,
       ...(kind ? { kind } : {}),
+      ...(auth || {}),
     }),
   });
+  if (res.status === 403) throw new Error('Upload not allowed. Please reload the page and try again.');
   if (!res.ok) throw new Error('Could not get upload URL');
   const { url, key } = await res.json();
   await putWithProgress(url, file, onProgress);
@@ -160,6 +173,7 @@ export async function uploadOne(
   presignURL: string,
   ctx?: { author?: string; title?: string },
   onProgress?: OnUploadProgress,
+  auth?: UploadAuth,
 ): Promise<UploadedMedia> {
   if (file.size > S3_MAX_PUT) {
     throw new Error(
@@ -188,11 +202,11 @@ export async function uploadOne(
     let originalKey: string | undefined;
     try {
       // The original is the larger upload — report progress on it.
-      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
+      originalKey = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress, auth);
     } catch {
       originalKey = undefined;
     }
-    const key = await presignAndPut(presignURL, optimized, base + '.jpg');
+    const key = await presignAndPut(presignURL, optimized, base + '.jpg', undefined, undefined, auth);
     return originalKey
       ? { type: 'image', src: key, original: originalKey, caption: '' }
       : { type: 'image', src: key, caption: '' };
@@ -206,7 +220,7 @@ export async function uploadOne(
   // progressively right away; `processing` tells the UI a transcode is pending.
   // The backend swaps in `hls` + `poster` once MediaConvert completes.
   if (type === 'video') {
-    const key = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress);
+    const key = await presignAndPut(presignURL, file, base + origExt, 'original', onProgress, auth);
     return { type, src: key, original: key, processing: true, caption: '' };
   }
 
@@ -219,7 +233,7 @@ export async function uploadOne(
   if (type === 'audio') {
     const tags = await readAudioTags(file);
     const title = tags.title || originalBase.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
-    const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
+    const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress, auth);
     return {
       type,
       src: key,
@@ -230,7 +244,7 @@ export async function uploadOne(
   }
 
   // Any image that couldn't be optimized (e.g. HEIC/GIF): upload as-is.
-  const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress);
+  const key = await presignAndPut(presignURL, file, base + origExt, undefined, onProgress, auth);
   return { type, src: key, caption: '' };
 }
 
@@ -242,12 +256,13 @@ export async function uploadPoster(
   file: File,
   presignURL: string,
   ctx?: { author?: string; title?: string },
+  auth?: UploadAuth,
 ): Promise<string> {
   const originalBase = file.name.replace(/\.[^.]+$/, '');
   const origExt = (file.name.match(/\.[^.]+$/) || [''])[0] || '';
   const base = composeBase(ctx, originalBase) + '-cover';
   const optimized = await optimizeImage(file);
   return optimized
-    ? presignAndPut(presignURL, optimized, base + '.jpg')
-    : presignAndPut(presignURL, file, base + origExt);
+    ? presignAndPut(presignURL, optimized, base + '.jpg', undefined, undefined, auth)
+    : presignAndPut(presignURL, file, base + origExt, undefined, undefined, auth);
 }

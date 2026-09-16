@@ -95,6 +95,34 @@ Notes that'll save you time:
 
 Thank you for any time you put into this. 🤍
 
+## Lockdown: passphrase to share, text-only reflections
+
+Contributions are now invite-only:
+
+- **Sharing a memory needs a passphrase.** `/share` shows a passphrase field
+  first and checks it with `POST /unlock` before revealing the form. The backend
+  enforces it on `/presign` and `/submit` (an `rk_admin` cookie also works), so
+  the form can't be bypassed. A correct passphrase is remembered on that device
+  for 90 days. Matching ignores case, spaces and punctuation, so
+  `blue-heron-sunrise` can be typed as "Blue Heron Sunrise".
+- **Reflections are text only.** No uploads, 3,000 character cap, at most one
+  link, a hidden honeypot field, and Turnstile. `REFLECTIONS_OPEN=false` stops
+  new reflections entirely.
+- **Cover image uploads** from the edit form still work for a memory's owner
+  (edit token) and admin.
+- **Email intake is unchanged.**
+
+Config (in `.deploy.env`, read by `deploy-backend.sh`):
+
+| Var                    | Notes                                                                |
+|------------------------|----------------------------------------------------------------------|
+| `CONTRIBUTOR_PASSWORD` | Required. Hyphenated words, no spaces or quotes. Rotate by changing it and redeploying the backend. With none set, only admin can share (the deploy script refuses to run without it). |
+| `REFLECTIONS_OPEN`     | `true` (default) or `false`.                                          |
+| `TURNSTILE_SECRET`     | Needed for the robot check to actually be enforced. The deploy script warns if it's blank. |
+
+Locally, `npm run capture` uses the passphrase `letmein` unless
+`CONTRIBUTOR_PASSWORD` is set in `capture/.env`.
+
 ## Spam protection (Cloudflare Turnstile)
 
 The share form uses [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) —

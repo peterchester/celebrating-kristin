@@ -17,7 +17,17 @@ const TURNSTILE_SITE_KEY =
       You can add photos, a voice recording, or a video too.
     </p>
 
-    <form id="memory-form">
+    <form id="gate" class="gate" hidden>
+      <label>
+        Passphrase
+        <input name="passphrase" type="text" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <small>Sharing is by invitation. Enter the passphrase you were given to continue.</small>
+      </label>
+      <button type="submit">Continue</button>
+      <p id="gate-status" role="status" aria-live="polite"></p>
+    </form>
+
+    <form id="memory-form" hidden>
       <label>
         <span>Your name <span class="req">*</span></span>
         <input name="name" type="text" required autocomplete="name" />
@@ -82,8 +92,85 @@ const TURNSTILE_SITE_KEY =
   const PRESIGN_API = import.meta.env.PUBLIC_PRESIGN_API ?? (DEV ? 'http://localhost:8787/presign' : '');
   const SUBMIT_API = import.meta.env.PUBLIC_SUBMIT_API ?? (DEV ? 'http://localhost:8787/submit' : '');
   const TURNSTILE_SITE_KEY = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? (DEV ? '1x00000000000000000000AA' : '');
+  // Same derivation as the memory page: explicit PUBLIC_API_BASE, else from SUBMIT_API.
+  const API_BASE = import.meta.env.PUBLIC_API_BASE || (SUBMIT_API ? SUBMIT_API.replace(/\/submit$/, '') : '');
 
   const form = document.getElementById('memory-form') as HTMLFormElement;
+
+  // ── Passphrase gate ────────────────────────────────────────────────────────
+  // Sharing is locked down: the backend rejects uploads and submissions without
+  // the contributor passphrase (or an admin cookie). The gate checks it against
+  // /unlock first so nobody fills out the form only to be turned away. A correct
+  // passphrase is remembered on this device for 90 days.
+  const gate = document.getElementById('gate') as HTMLFormElement;
+  const gateStatus = document.getElementById('gate-status') as HTMLParagraphElement;
+  const readCookie = (k: string) => {
+    const m = document.cookie.split('; ').find((c) => c.startsWith(k + '='));
+    return m ? decodeURIComponent(m.slice(k.length + 1)) : '';
+  };
+  const cookieSuffix = () => '; path=/; samesite=Lax' + (location.protocol === 'https:' ? '; secure' : '');
+  const adminToken = readCookie('rk_admin');
+  let passphrase = readCookie('rk_pass');
+  const auth = () => ({ passphrase: passphrase || undefined, adminToken: adminToken || undefined });
+
+  async function checkPass(p: string) {
+    const res = await fetch(API_BASE + '/unlock', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ passphrase: p || undefined, adminToken: adminToken || undefined }),
+    });
+    return res.ok;
+  }
+  function openForm() {
+    gate.hidden = true;
+    form.hidden = false;
+    // Turnstile may skip a widget that was hidden when its script loaded; render it now if so.
+    const ts = (window as any).turnstile;
+    const box = form.querySelector('.cf-turnstile') as HTMLElement | null;
+    if (ts && box && !box.childElementCount) ts.render(box);
+  }
+  function showGate(msg = '') {
+    passphrase = '';
+    document.cookie = 'rk_pass=; max-age=0' + cookieSuffix();
+    form.hidden = true;
+    gate.hidden = false;
+    gateStatus.textContent = msg;
+    gateStatus.className = msg ? 'err' : '';
+  }
+  async function initGate() {
+    if (!API_BASE) return openForm(); // preview mode: no backend to check against
+    if (passphrase || adminToken) {
+      try { if (await checkPass(passphrase)) return openForm(); } catch {}
+    }
+    showGate();
+    (gate.querySelector('input') as HTMLInputElement).focus();
+  }
+  gate.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = gate.querySelector('button')!;
+    const p = String((gate.querySelector('input') as HTMLInputElement).value || '').trim();
+    if (!p) return;
+    btn.disabled = true;
+    gateStatus.className = '';
+    gateStatus.textContent = 'Checking…';
+    try {
+      if (await checkPass(p)) {
+        passphrase = p;
+        document.cookie = 'rk_pass=' + encodeURIComponent(p) + '; max-age=' + 90 * 86400 + cookieSuffix();
+        gateStatus.textContent = '';
+        openForm();
+      } else {
+        gateStatus.textContent = 'That passphrase didn’t match. Please check it and try again.';
+        gateStatus.className = 'err';
+      }
+    } catch {
+      gateStatus.textContent = 'Could not check the passphrase. Please try again.';
+      gateStatus.className = 'err';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  initGate();
   const statusEl = document.getElementById('status') as HTMLParagraphElement;
   const progress = createUploadProgress(document.getElementById('upload-progress') as HTMLElement);
 
@@ -187,7 +274,7 @@ const TURNSTILE_SITE_KEY =
           for (let i = 0; i < fileArr.length; i++) {
             const file = fileArr[i];
             progress.start(file.name, i, fileArr.length);
-            media.push(await uploadOne(file, PRESIGN_API, ctx, (p) => progress.update(p)));
+            media.push(await uploadOne(file, PRESIGN_API, ctx, (p) => progress.update(p), auth()));
           }
         } finally {
           progress.reset();
@@ -207,6 +294,7 @@ const TURNSTILE_SITE_KEY =
         media,
         email: String(fd.get('email') || '').trim() || undefined, // private — backend stores separately
         turnstileToken: turnstileToken || undefined, // verified server-side, never stored
+        ...auth(), // passphrase (or admin) — checked server-side, never stored
       };
 
       if (!SUBMIT_API) {
@@ -221,6 +309,14 @@ const TURNSTILE_SITE_KEY =
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(submission),
       });
+      if (res.status === 403) {
+        const j = await res.json().catch(() => ({}));
+        if (j?.error === 'passphrase required') {
+          showGate('The passphrase has changed. Please enter the new one, then submit again.');
+          return;
+        }
+        throw new Error('The “I’m not a robot” check failed. Please try again.');
+      }
       if (!res.ok) throw new Error('Submission failed');
       const { id, editToken } = await res.json();
       if (id && editToken) rememberOwner(id, editToken);
@@ -254,6 +350,9 @@ const TURNSTILE_SITE_KEY =
   h1 { font-weight: 400; font-size: 4.4rem; margin: 0 0 .5rem; }
   .lede { color: var(--soft); margin: 0 0 2rem; }
   form { display: grid; gap: 1.4rem; font-family: -apple-system, system-ui, sans-serif; }
+  form[hidden] { display: none; }
+  #gate-status { margin: 0; min-height: 1.2em; }
+  #gate-status.err { color: #ff9a8a; }
   label { display: grid; gap: .4rem; font-size: .95rem; }
   .req { color: #ff9a8a; }
   input, textarea {

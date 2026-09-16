@@ -23,6 +23,16 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Optional Cloudflare Turnstile secret. Blank skips captcha verification.
+  ContributorPassword:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Shared passphrase required to share a new memory (/presign + /submit). Blank = only admin can share. Compared case-insensitively, ignoring spaces and punctuation.
+  ReflectionsOpen:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Set to false to stop accepting new reflections (text comments) on the site.
   NotifyFrom:
     Type: String
     Default: ''
@@ -75,6 +85,8 @@ Resources:
           PRIVATE_BUCKET: !Ref PrivateBucket
           ADMIN_TOKEN: !Ref AdminToken
           TURNSTILE_SECRET: !Ref TurnstileSecret
+          CONTRIBUTOR_PASSWORD: !Ref ContributorPassword
+          REFLECTIONS_OPEN: !Ref ReflectionsOpen
           NOTIFY_FROM: !Ref NotifyFrom
           SITE_URL: !Ref SiteUrl
           EMAIL_ADDRESS: !Ref EmailAddress
