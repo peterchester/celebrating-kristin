@@ -75,7 +75,7 @@ const safeId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
 // "Blue Heron Sunrise", "blue-heron-sunrise" and "blueheronsunrise" all match.
 const normPass = (p) => String(p ?? '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 const PASS_HASH = normPass(CONTRIBUTOR_PASSWORD) ? sha(normPass(CONTRIBUTOR_PASSWORD)) : '';
-const passOk = (p) => !!PASS_HASH && typeof p === 'string' && !!normPass(p) && eq(sha(normPass(p)), PASS_HASH);
+const passOk = (p) => !!PASS_HASH && typeof p === 'string' && eq(p, PASS_HASH);
 const canContribute = (s) => passOk(s?.passphrase) || isAdmin(s?.adminToken);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

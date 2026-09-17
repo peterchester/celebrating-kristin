@@ -20,7 +20,7 @@ const TURNSTILE_SITE_KEY =
     <form id="gate" class="gate" hidden>
       <label>
         Passphrase
-        <input name="passphrase" type="text" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+        <input name="passphrase" type="password" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
         <small>Sharing is by invitation. Enter the passphrase you were given to continue.</small>
       </label>
       <button type="submit">Continue</button>
@@ -113,6 +113,13 @@ const TURNSTILE_SITE_KEY =
   let passphrase = readCookie('rk_pass');
   const auth = () => ({ passphrase: passphrase || undefined, adminToken: adminToken || undefined });
 
+  // Mirror the backend's normPass so we hash the same canonical form.
+  const normPass = (p: string) => String(p ?? '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  async function sha256hex(text: string): Promise<string> {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
   async function checkPass(p: string) {
     const res = await fetch(API_BASE + '/unlock', {
       method: 'POST',
@@ -148,15 +155,16 @@ const TURNSTILE_SITE_KEY =
   gate.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = gate.querySelector('button')!;
-    const p = String((gate.querySelector('input') as HTMLInputElement).value || '').trim();
-    if (!p) return;
+    const raw = String((gate.querySelector('input') as HTMLInputElement).value || '').trim();
+    if (!raw) return;
     btn.disabled = true;
     gateStatus.className = '';
     gateStatus.textContent = 'Checking…';
     try {
-      if (await checkPass(p)) {
-        passphrase = p;
-        document.cookie = 'rk_pass=' + encodeURIComponent(p) + '; max-age=' + 90 * 86400 + cookieSuffix();
+      const hash = await sha256hex(normPass(raw));
+      if (await checkPass(hash)) {
+        passphrase = hash;
+        document.cookie = 'rk_pass=' + encodeURIComponent(hash) + '; max-age=' + 90 * 86400 + cookieSuffix();
         gateStatus.textContent = '';
         openForm();
       } else {
